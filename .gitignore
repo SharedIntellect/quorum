@@ -1,0 +1,16 @@
+.DS_Store
+*.swp
+*.swo
+*~
+.env
+branding/Daniels_Concepts/
+branding/quorum-logo-v*
+branding/quorum-icon-v*
+branding/quorum-icon.*
+branding/quorum-logo.svg
+branding/quorum-logo-512.png
+branding/quorum-social-preview.svg
+branding/quorum-social-preview.png
+branding/quorum-social-preview-v2.*
+branding/quorum-social-preview-final.png
+branding/quorum-readme-banner.png
