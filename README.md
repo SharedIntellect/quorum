@@ -41,7 +41,7 @@ Quorum does what none of these do: **parallel specialized expertise + mandatory 
 
 Real production impact:
 - **Caught a CRITICAL shell injection vulnerability** in the first shakedown that would have been catastrophic in production
-- **Validated the most complex swarm design** we've built (Orchestrator v1.4) to 26/26 criteria, then caught 10 additional operational gaps in simulation
+- **Validated the most complex multi-agent system** in our ecosystem to 26/26 criteria, then caught 10 additional operational gaps in simulation
 - **Identified misattributions and architectural tensions** in a 35-technique research synthesis that a single reviewer would have missed
 - **Operates at zero ongoing cost** — uses deterministic tools instead of re-inference for routine validation checks
 
@@ -55,7 +55,7 @@ Clone this repo (coming soon) or use the reference implementation:
 
 ```bash
 git clone https://github.com/SharedIntellect/quorum.git
-cd validator
+cd quorum
 pip install -r requirements.txt
 ```
 
@@ -91,7 +91,7 @@ critics:
 ### 3. Run
 
 ```bash
-validator run \
+quorum run \
   --target my-swarm-config.yaml \
   --depth standard \
   --rubric research-synthesis
@@ -125,7 +125,7 @@ Quorum outputs:
 - **CONFIG_REFERENCE.md** — All configurable options, rubric formats, depth profiles
 - **IMPLEMENTATION.md** — How to build your own Quorum instance (or adapt this one)
 - **examples/** — Reference configs for common workloads (configs, research synthesis, code, ops)
-- **tools/** — The LATM-style deterministic tools Quorum uses internally
+- **docs/** — Tutorial, external reviews, and supplementary documentation
 - **branding/** — Logo, colors, visual guidelines (use as you like)
 
 ---
@@ -177,9 +177,9 @@ Full review: [docs/EXTERNAL_REVIEWS.md](docs/EXTERNAL_REVIEWS.md)
 
 ## License
 
-Quorum is released under [LICENSE_TBD]. Reference implementations and examples are MIT. Use freely, modify as needed, contribute back.
+Quorum is released under the [MIT License](LICENSE). Use freely, modify as needed, contribute back.
 
 ---
 
 By Daniel Cervera and Akkari | SharedIntellect  
-*First released February 2026. Used in production for agent swarm validation, configuration auditing, research synthesis evaluation, and code review.*
+*First released February 2026. Used in production for agent system validation, configuration auditing, research synthesis evaluation, and code review.*

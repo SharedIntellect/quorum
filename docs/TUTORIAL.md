@@ -10,7 +10,7 @@ Clone the repo and navigate to the examples directory:
 
 ```bash
 git clone https://github.com/SharedIntellect/quorum.git
-cd validator/examples/tutorial
+cd quorum/examples/tutorial
 ```
 
 ---
@@ -59,7 +59,7 @@ Issues we planted:
 We'll use the swarm config rubric at standard depth:
 
 ```bash
-validator run \
+quorum run \
   --target bad-config.yaml \
   --rubric swarm-config \
   --depth standard
@@ -174,7 +174,7 @@ agents:
 Run validation again with the fixed config:
 
 ```bash
-validator run \
+quorum run \
   --target fixed-config.yaml \
   --rubric swarm-config \
   --depth standard

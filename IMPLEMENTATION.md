@@ -285,7 +285,7 @@ Use for: critical decisions, pre-launch reviews, irreversible actions.
 # .github/workflows/validate.yaml
 - name: Validate swarm config
   run: |
-    validator run \
+    quorum run \
       --target configs/swarm.yaml \
       --depth quick \
       --rubric swarm-config \
@@ -296,7 +296,7 @@ Use for: critical decisions, pre-launch reviews, irreversible actions.
 
 ```bash
 # Before merging a new agent config
-validator run \
+quorum run \
   --target pr-changes/new-agent.yaml \
   --depth standard \
   --rubric agent-config \
@@ -307,7 +307,7 @@ validator run \
 
 ```bash
 # Validate a research report before publishing
-validator run \
+quorum run \
   --target research/synthesis.md \
   --depth thorough \
   --rubric research-synthesis \
