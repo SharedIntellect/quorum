@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="branding/quorum-banner-black.png">
-    <img src="branding/quorum-banner-white.png" alt="Quorum — A Production-Grade Quality Gate for Agent Systems" width="800">
-  </picture>
+  <img src="branding/github/gh_quorum_dark.jpg" alt="Quorum — A Production-Grade Quality Gate for Agentic Systems" width="900">
 </p>
 
 <p align="center">
