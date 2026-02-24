@@ -3,7 +3,7 @@
 **Version:** 2.3 (Production)  
 **Last Updated:** February 2026  
 **Status:** Documented and ready for external implementation  
-**Platform:** Designed for [OpenClaw](https://openclaw.ai) agent systems. Cross-platform compatibility with other agent frameworks is under active exploration — see [MODEL_REQUIREMENTS.md](MODEL_REQUIREMENTS.md) for supported models and platforms.
+**Platform:** Designed for [OpenClaw](https://openclaw.ai) agent systems. Cross-platform compatibility with other agent frameworks is under active exploration — see [MODEL_REQUIREMENTS.md](docs/MODEL_REQUIREMENTS.md) for supported models and platforms.
 
 ---
 
@@ -329,7 +329,7 @@ Quorum is built on these peer-reviewed papers:
 
 ## 11. Getting Started
 
-1. Read [IMPLEMENTATION.md](IMPLEMENTATION.md) for a reference walkthrough
+1. Read [IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for a reference walkthrough
 2. Review [examples/](examples/) for your use case
 3. Adapt rubrics from [reference-rubrics/](reference-rubrics/) or build custom
 4. Run the tutorial: `validator run --example basic`

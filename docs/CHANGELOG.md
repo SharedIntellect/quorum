@@ -4,6 +4,31 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0] — 2026-02-23
+
+### Added — Reference Implementation MVP
+- **Working CLI** — `quorum run --target <file> --depth quick|standard|thorough`
+- **2 critics** — Correctness and Completeness, both with evidence grounding enforcement
+- **LiteLLM universal provider** — supports Anthropic, OpenAI, Mistral, Groq, and 100+ models
+- **2 built-in rubrics** — `research-synthesis` (10 criteria) and `agent-config` (10 criteria)
+- **Pipeline orchestration** — supervisor → critics → aggregator → verdict (sequential MVP)
+- **Deterministic verdict assignment** — PASS / PASS_WITH_NOTES / REVISE / REJECT based on finding severity
+- **Deduplication** — SequenceMatcher-based cross-critic finding dedup with source merging
+- **Run directories** — timestamped output dirs with manifest, critic JSONs, verdict.json, report.md
+- **First-run setup** — interactive config wizard (model tier + depth preference)
+- **Example artifacts** — `sample-research.md` (planted contradictions, unsourced claims) and `sample-agent-config.yaml` (6 planted flaws)
+- **FOR_BEGINNERS.md** — explains spec-driven AI tools for newcomers
+- **Updated README** — real CLI commands, working install instructions
+
+### Tested
+- Research synthesis: 10 findings, REJECT verdict, all planted flaws detected, 8 duplicates merged
+- Agent config: 12 findings, REJECT verdict, all 6+ planted flaws detected, 4 duplicates merged
+
+### Fixed
+- LiteLLM requires full model slugs (`anthropic/claude-sonnet-4-20250514`), not short names
+
+---
+
 ## [1.0.0] — 2026-02-22
 
 ### Added

@@ -104,7 +104,7 @@ Not all AI models are equal. Quorum needs models that can reason carefully, use 
 | **Functional** | Claude Haiku, GPT-4 | Reduced critic count, simpler rubrics, still useful |
 | **Not recommended** | Llama 70B, most open models (as of Feb 2026) | Reasoning depth insufficient for reliable validation |
 
-See [MODEL_REQUIREMENTS.md](docs/MODEL_REQUIREMENTS.md) for details.
+See [MODEL_REQUIREMENTS.md](MODEL_REQUIREMENTS.md) for details.
 
 ---
 
@@ -147,7 +147,7 @@ These are estimates based on Claude Sonnet pricing. Your costs will vary by mode
 
 1. **Install OpenClaw** if you haven't: [github.com/openclaw/openclaw](https://github.com/openclaw/openclaw)
 2. **Read the README** for a higher-level overview of Quorum's architecture
-3. **Try the tutorial** at [docs/TUTORIAL.md](docs/TUTORIAL.md) for a guided first run
+3. **Try the tutorial** at [docs/TUTORIAL.md](TUTORIAL.md) for a guided first run
 4. **Browse example rubrics** to see what evaluation criteria look like
 5. **Ask questions** in [Discussions](https://github.com/SharedIntellect/quorum/discussions)
 

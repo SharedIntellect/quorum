@@ -81,7 +81,7 @@ quorum run --target examples/sample-research.md --depth quick
 
 First time? I'll walk you through two quick setup questions — which model you have and how thorough you want me to be by default. I'll save your preferences so we only do this once.
 
-**Completely new to AI agent tooling?** No problem. → [FOR_BEGINNERS.md](FOR_BEGINNERS.md) — I'll start from the very beginning.
+**Completely new to AI agent tooling?** No problem. → [FOR_BEGINNERS.md](docs/FOR_BEGINNERS.md) — I'll start from the very beginning.
 
 ---
 
@@ -143,7 +143,7 @@ Just a model that can reason well. I'll figure out the rest.
 | **Functional** | Claude Haiku 4.5+, GPT-4o | I'll still help, but with less depth |
 | **Not enough** | Llama 70B, most open models (Feb 2026) | I need more reasoning power than these can give me |
 
-I auto-detect your model on first run and configure myself accordingly. Details: [MODEL_REQUIREMENTS.md](MODEL_REQUIREMENTS.md)
+I auto-detect your model on first run and configure myself accordingly. Details: [MODEL_REQUIREMENTS.md](docs/MODEL_REQUIREMENTS.md)
 
 ---
 
@@ -172,11 +172,11 @@ I'm working. I'm real. I'm also still growing.
 
 | | |
 |---|---|
-| [FOR_BEGINNERS.md](FOR_BEGINNERS.md) | New to all this? I'll walk you through it step by step |
+| [FOR_BEGINNERS.md](docs/FOR_BEGINNERS.md) | New to all this? I'll walk you through it step by step |
 | [SPEC.md](SPEC.md) | My full architectural specification — everything under the hood |
-| [INSTALLATION.md](INSTALLATION.md) | Detailed setup & troubleshooting |
-| [MODEL_REQUIREMENTS.md](MODEL_REQUIREMENTS.md) | Which models work with me and why |
-| [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) | Every config option and rubric format |
+| [INSTALLATION.md](docs/INSTALLATION.md) | Detailed setup & troubleshooting |
+| [MODEL_REQUIREMENTS.md](docs/MODEL_REQUIREMENTS.md) | Which models work with me and why |
+| [CONFIG_REFERENCE.md](docs/CONFIG_REFERENCE.md) | Every config option and rubric format |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Help me grow — especially with rubrics for new domains |
 
 ---
