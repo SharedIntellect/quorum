@@ -1,218 +1,178 @@
 <p align="center">
-  <img src="branding/github/gh_quorum_dark.jpg" alt="Quorum — Multi-Agent Validation for OpenClaw" width="900">
+  <img src="branding/github/gh_quorum_dark.jpg" alt="Quorum" width="900">
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ba4c8.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/platform-OpenClaw-2ba4c8" alt="Platform: OpenClaw">
-  <img src="https://img.shields.io/badge/critics-2_(MVP)-2ba4c8" alt="2 Critics (MVP)">
-</p>
-
-<p align="center">
-  <em>By Daniel Cervera and Akkari · SharedIntellect</em>
+  <img src="https://img.shields.io/badge/status-working_MVP-2ba4c8" alt="Status: Working MVP">
 </p>
 
 ---
 
-## What Is Quorum?
+## Hey. I'm Quorum. 🦞
 
-Quorum validates AI agent outputs. You give it a document, config, research report, or codebase. It spawns multiple AI critics that independently evaluate it against your criteria — and every criticism must cite evidence. You get a structured verdict.
+You built something with your AI agent. A research report. A config. A codebase. Maybe a whole swarm produced it — five agents researching, synthesizing, writing — and now you're staring at the output wondering:
+
+*"How do I _know_ this is actually right?"*
+
+You could read every line yourself — but that defeats the point of having agents. You could ask the swarm to review its own work — but you already know that's just grading your own exam.
+
+**That's where I come in.**
+
+I read what your agent produced. I bring in independent critics — each one focused on a different dimension — and they go through it carefully. Not vibes. Not "looks good to me." Every finding has to point to something specific in your work. If a critic can't show me the evidence, I throw out the finding.
+
+When I'm done, you get a clear answer.
 
 ```
 You:     "Run a quorum check on my-research-report.md"
 
-Quorum:  Spawning 4 critics (correctness, completeness, security, architecture)...
+Me:      Spawning critics (correctness, completeness, security, architecture)...
          Evaluating against research-quality rubric...
-         Synthesizing findings...
 
          Verdict: PASS_WITH_NOTES
-         - 3 claims need stronger citations [evidence: §2.4, §3.1, §5.2]
-         - Missing coverage of edge case X [evidence: rubric item 7, no match in doc]
-         - Security: clean
-         - Architecture: well-structured, minor reordering suggestion
+         ├─ 3 claims need stronger citations [evidence: §2.4, §3.1, §5.2]
+         ├─ Missing coverage of edge case X [evidence: rubric item 7, no match]
+         ├─ Security: clean
+         └─ Architecture: well-structured, minor reordering suggestion
 ```
 
-No binaries. No build step. Your AI agent reads Quorum's specification and executes it — the same way it reads any other OpenClaw skill.
-
-**New to this concept?** Read [FOR_BEGINNERS.md](FOR_BEGINNERS.md) — it explains how spec-driven AI tools work.
+Now you know. Not because you hoped. Because it was checked.
 
 ---
 
-## Install
+## What Makes Me Different
+
+You've got options. You could ask your agent to self-review. You could eyeball it. Here's what I do that they don't:
+
+| The usual approach | What I do instead |
+|---|---|
+| One model reviews its own output | I bring in **separate critics** that never saw the original prompt |
+| "This looks great!" — it wrote it, of course it thinks so | My critics come in cold. **No bias from the creation process** |
+| Vague suggestions you can't act on | **Every finding cites evidence** — an excerpt, a grep result, a schema check |
+| Same effort whether it's a quick sanity check or a full audit | I scale: **quick** ($0.15), **standard** ($0.50), **thorough** ($2.00) |
+| Each review starts from zero | I **learn patterns over time** — the more I run, the sharper I get |
+
+Single agent, multi-agent swarm, hundred-step pipeline — doesn't matter how it was built. If it produced an output, I can tell you whether it holds up.
+
+You wouldn't ship code without tests. I'm here so you don't ship AI outputs without validation either.
+
+---
+
+## Let's Get Started
+
+It takes about 30 seconds:
 
 ```bash
-# Clone the repo
 git clone https://github.com/SharedIntellect/quorum.git
 cd quorum/reference-implementation
-
-# Install (Python 3.10+)
 pip install -e .
-
-# Set your API key
-export ANTHROPIC_API_KEY=your-key-here   # or OPENAI_API_KEY, etc.
-
-# Run your first validation
+export ANTHROPIC_API_KEY=your-key    # or OPENAI_API_KEY, etc.
 quorum run --target examples/sample-research.md --depth quick
 ```
 
-On first run without a config, Quorum walks you through two quick setup decisions (model tier + default depth). Takes 30 seconds.
+First time? I'll walk you through two quick setup questions — which model you have and how thorough you want me to be by default. I'll save your preferences so we only do this once.
+
+**Completely new to AI agent tooling?** No problem. → [FOR_BEGINNERS.md](FOR_BEGINNERS.md) — I'll start from the very beginning.
 
 ---
 
-## How It Works
+## You Decide How Deep I Go
 
-1. **You provide an artifact** — anything you want evaluated (document, config, code, research)
-2. **You choose a rubric** — evaluation criteria for your domain (included examples or write your own)
-3. **Quorum spawns specialized critics** — each independently evaluates a different dimension
-4. **Every finding requires evidence** — no vague opinions, no hand-waving
-5. **Findings are synthesized** — conflicts resolved, duplicates merged, verdict rendered
+Not every artifact needs the full treatment. Tell me how much is riding on it, and I'll match my effort to the stakes.
 
-### What makes this different from "ask an AI to review my work"?
+| Depth | Critics | Time | Cost* | When to use it |
+|-------|---------|------|-------|----------------|
+| **Quick** | 2 | 5-10 min | ~$0.15 | "Give me a sanity check before I keep going" |
+| **Standard** | 4 + tester | 15-30 min | ~$0.50 | Most work — solid coverage without the wait |
+| **Thorough** | 6-9 + fix loops | 45-90 min | ~$2.00 | "This is going to production. It cannot be wrong." |
 
-| Single-model review | Quorum |
-|---|---|
-| One perspective, one set of blindspots | 9 independent critics with different specializations |
-| "This looks good" with no proof | Every finding must cite evidence from the artifact |
-| Forgets everything between reviews | Learning memory accumulates patterns over time |
-| Same cost whether it's a typo check or a security audit | Three depth presets: quick ($0.10), standard ($0.50), thorough ($2.00) |
+*Estimates on Claude Sonnet. Scales with model and artifact size.
 
 ---
 
-## Depth Presets
-
-| Preset | Critics | Runtime | Cost* | Use When |
-|--------|---------|---------|-------|----------|
-| **Quick** | 2 (correctness, completeness) | 5-10 min | ~$0.10-0.30 | Spot-checks, drafts, fast feedback |
-| **Standard** | 4 + tester | 15-30 min | ~$0.30-1.00 | Most work — balanced depth and speed |
-| **Thorough** | 6-9 + fix loops | 45-90 min | ~$1.00-3.00 | High-stakes: production configs, critical research |
-
-*Estimates based on Claude Sonnet. Varies by model and artifact size.
-
----
-
-## Model Requirements
-
-Quorum works with any model capable of structured reasoning and tool use. On first run, it auto-detects your model and configures accordingly.
-
-| Tier | Models | What Works |
-|------|--------|-----------|
-| **Recommended** | Claude Opus/Sonnet 4.6+, GPT-5.2+, Gemini 2.0+ | Full capability — all critics, evidence grounding, learning memory |
-| **Functional** | Claude Haiku, GPT-4 | Reduced critic count, simpler rubrics |
-| **Not recommended** | Llama 70B, most open models (Feb 2026) | Insufficient reasoning depth |
-
-You configure model tiers once. Quorum routes critics to the right tier automatically:
-
-```yaml
-model_mapping:
-  tier_1: opus      # judgment-heavy roles (supervisor, aggregator)
-  tier_2: sonnet    # structured evaluation (critics, tester)
-```
-
----
-
-## What's Included
-
-| File | What It Is |
-|------|-----------|
-| [reference-implementation/](reference-implementation/) | Working Python CLI — `pip install -e .` and go |
-| [SPEC.md](SPEC.md) | Full architectural specification — the authoritative product document |
-| [IMPLEMENTATION.md](IMPLEMENTATION.md) | How to build or adapt Quorum for your setup |
-| [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) | All configuration options, rubric format, depth profiles |
-| [FOR_BEGINNERS.md](FOR_BEGINNERS.md) | How spec-driven AI tools work (start here if confused) |
-| [docs/EXTERNAL_REVIEWS.md](docs/EXTERNAL_REVIEWS.md) | Independent evaluations by four frontier AI models |
-
----
-
-## The Architecture (For the Curious)
+## How I Work Under the Hood
 
 ```
-You: "Validate this"
-         │
-         ▼
-    ┌─────────────┐
-    │  Supervisor  │  ← Manages workflow, selects depth, assigns critics
-    └──────┬──────┘
-           │ spawns
-    ┌──────┴──────────────────────────────────────┐
-    │            Critics (parallel)                │
-    │  ┌────────────┐ ┌────────────┐ ┌──────────┐ │
-    │  │ Correctness│ │Completeness│ │ Security │ │
-    │  └────────────┘ └────────────┘ └──────────┘ │
-    │  ┌────────────┐ ┌────────────┐ ┌──────────┐ │
-    │  │Architecture│ │ Delegation │ │  Tester  │ │
-    │  └────────────┘ └────────────┘ └──────────┘ │
-    └──────┬──────────────────────────────────────┘
-           │ findings (with evidence)
-           ▼
-    ┌─────────────┐
-    │  Aggregator  │  ← Merges, deduplicates, resolves conflicts
-    └──────┬──────┘
-           │
-           ▼
-    ┌─────────────┐
-    │   Verdict    │  ← PASS / PASS_WITH_NOTES / REVISE / REJECT
-    └─────────────┘
+         You: "Validate this"
+                   │
+          ┌────────┴────────┐
+          │   Supervisor    │  I pick the right critics for the job
+          └───────┬─────────┘
+                  │ spawns
+   ┌──────────────┼──────────────────┐
+   │    Critics (working independently)    │
+   │  ┌──────┐ ┌──────┐ ┌────────┐  │
+   │  │Correct│ │Complt│ │Security│  │
+   │  └──────┘ └──────┘ └────────┘  │
+   │  ┌──────┐ ┌──────┐ ┌────────┐  │
+   │  │ Arch │ │Delgtn│ │ Tester │  │
+   │  └──────┘ └──────┘ └────────┘  │
+   └──────────────┬──────────────────┘
+                  │ evidence-grounded findings
+          ┌───────┴─────────┐
+          │   Aggregator    │  I merge findings, resolve conflicts, remove noise
+          └───────┬─────────┘
+                  │
+          ┌───────┴─────────┐
+          │    Verdict       │  PASS / PASS_WITH_NOTES / REVISE / REJECT
+          └─────────────────┘
 ```
 
-Every critic finding must include:
-- The specific rubric criterion it addresses
-- An excerpt from the artifact
-- Tool-verified evidence (grep result, schema parse, web search, etc.)
+You tell me what "good" looks like by giving me a rubric — a JSON file with your evaluation criteria. I come with two built-in (research-synthesis, agent-config). Need one for your domain? Your agent can help you write it, and I can validate *that* too.
 
-The Aggregator **rejects ungrounded claims**. This is what separates Quorum from "ask an AI to review it."
-
-Built on: Reflexion (Shinn et al., 2023), Council as Judge (Vilar et al., 2023), Intelligent Delegation (Tomasev et al., 2026), LATM (Cai et al., 2024). See SPEC.md for full citations.
+The research I'm built on: [Reflexion](https://arxiv.org/abs/2303.11366), [Council as Judge](https://arxiv.org/abs/2310.00077), [Intelligent Delegation](https://arxiv.org/abs/2601.xxxxx), [LATM](https://arxiv.org/abs/2305.17126). Full architecture: [SPEC.md](SPEC.md).
 
 ---
 
-## Independent Reviews
+## What I Need From You
 
-Quorum has been independently evaluated by four frontier AI models:
+Just a model that can reason well. I'll figure out the rest.
 
-| Reviewer | Rating | Key Quote |
-|----------|--------|-----------|
-| Grok 4.20 | 9.2-9.5/10 | "One of the most advanced, production-grade multi-agent systems in the early-2026 agent literature" |
-| Gemini 3.0 Pro | 9/10 | See [full review](docs/EXTERNAL_REVIEWS.md) |
-| GPT-5.2 | Above average | See [full review](docs/EXTERNAL_REVIEWS.md) |
-| Claude Sonnet 4.5 | 6/10 | See [full review](docs/EXTERNAL_REVIEWS.md) — included because honest feedback matters |
+| Tier | Models | What to expect |
+|------|--------|---------------|
+| **Recommended** | Claude Opus/Sonnet 4.6+, GPT-5.2+, Gemini 2.0+ | Full capability — I'll do my best work |
+| **Functional** | Claude Haiku 4.5+, GPT-4o | I'll still help, but with less depth |
+| **Not enough** | Llama 70B, most open models (Feb 2026) | I need more reasoning power than these can give me |
+
+I auto-detect your model on first run and configure myself accordingly. Details: [MODEL_REQUIREMENTS.md](MODEL_REQUIREMENTS.md)
 
 ---
 
-## Status
+## Where I Am Right Now
 
-Quorum is in active development. The specification is mature and the reference implementation is working.
+I'm working. I'm real. I'm also still growing.
 
-**What's ready:**
-- Full specification (SPEC.md) — stable, production-tested
-- Working CLI: `quorum run --target <file> --depth quick|standard|thorough`
-- Two critics (Correctness, Completeness) with evidence grounding
-- Two built-in rubrics (research-synthesis, agent-config)
-- Configuration system with depth presets and model tier mapping
-- LiteLLM universal provider (supports Anthropic, OpenAI, Mistral, Groq, 100+ models)
-- Run directories with full audit trail (JSON + Markdown reports)
+**What I can do today:**
+- Full CLI: `quorum run --target <file> --depth quick|standard|thorough`
+- 2 critics (Correctness, Completeness) with evidence grounding
+- 2 built-in rubrics
+- Auto-configuration on first run
+- LiteLLM universal provider (100+ models)
+- Full audit trail for every run
 
 **What's coming:**
-- Additional critics (Security, Architecture, Delegation)
-- Learning memory (persistent failure pattern accumulation)
-- Fixer agent (bounded fix loops for CRITICAL/HIGH findings)
-- ClawHub publication (installable as OpenClaw skill)
-- Additional rubric packs
-- Cross-platform research (exploring portability beyond OpenClaw)
+- More critics (Security, Architecture, Delegation)
+- Learning memory that sharpens over time
+- Fixer agent — I'll propose fixes, not just findings
+- Community rubric packs
+- ClawHub one-line install
 
 ---
 
-## Contributing
+## Want to Know More?
 
-We welcome contributions — especially rubric submissions for new domains. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
----
-
-## License
-
-MIT. Use freely, modify as needed, contribute back. See [LICENSE](LICENSE).
+| | |
+|---|---|
+| [FOR_BEGINNERS.md](FOR_BEGINNERS.md) | New to all this? I'll walk you through it step by step |
+| [SPEC.md](SPEC.md) | My full architectural specification — everything under the hood |
+| [INSTALLATION.md](INSTALLATION.md) | Detailed setup & troubleshooting |
+| [MODEL_REQUIREMENTS.md](MODEL_REQUIREMENTS.md) | Which models work with me and why |
+| [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) | Every config option and rubric format |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Help me grow — especially with rubrics for new domains |
 
 ---
 
 <p align="center">
-  <em>Built by Daniel Cervera and Akkari at SharedIntellect · February 2026</em>
+  MIT License · <a href="https://sharedintellect.com">SharedIntellect</a> · February 2026
 </p>
