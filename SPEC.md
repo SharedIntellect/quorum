@@ -2,7 +2,8 @@
 
 **Version:** 2.3 (Production)  
 **Last Updated:** February 2026  
-**Status:** Documented and ready for external implementation
+**Status:** Documented and ready for external implementation  
+**Platform:** Designed for [OpenClaw](https://openclaw.ai) agent systems. Cross-platform compatibility with other agent frameworks is under active exploration — see [MODEL_REQUIREMENTS.md](MODEL_REQUIREMENTS.md) for supported models and platforms.
 
 ---
 
