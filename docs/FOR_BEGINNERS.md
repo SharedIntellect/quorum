@@ -66,7 +66,7 @@ That's it. No build step. No configuration files to wrestle with. No Docker cont
 
 ## "But where's the code?"
 
-Right here: [`reference-implementation/`](reference-implementation/)
+Right here: [`reference-implementation/`](../reference-implementation/)
 
 ```bash
 cd reference-implementation
