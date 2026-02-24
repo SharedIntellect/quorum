@@ -1,0 +1,19 @@
+# Thorough depth profile — maximum rigor for critical decisions
+# Critics: all available (correctness + completeness in MVP)
+# Use for: production config changes, research publication, security review
+
+critics:
+  - correctness
+  - completeness
+
+# Model tiers — set to your preferred providers.
+# Tier 1 = strongest model (used for judgment-heavy roles)
+# Tier 2 = capable but cost-efficient (used for critics)
+# For thorough mode, consider using stronger models for both tiers.
+model_tier1: anthropic/claude-opus-4-0
+model_tier2: claude-opus-4   # Use tier 1 for all critics in thorough mode
+
+max_fix_loops: 0       # Future: 2 fix loops on CRITICAL/HIGH findings
+depth_profile: thorough
+temperature: 0.05      # Extra-low temperature for maximum determinism
+max_tokens: 8192       # Larger context window for thorough analysis
