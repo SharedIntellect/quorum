@@ -1,7 +1,7 @@
 ---
 name: quorum
 description: Multi-agent validation framework. Spawns independent AI critics to evaluate artifacts (documents, configs, code, research) against rubrics with evidence-grounded findings.
-metadata: {"openclaw":{"requires":{"bins":["python3","pip"]},"install":[{"id":"python-deps","kind":"shell","command":"cd reference-implementation && pip install -r requirements.txt","label":"Install Quorum Python dependencies"}]}}
+metadata: {"openclaw":{"requires":{"bins":["python3","pip"],"env":["ANTHROPIC_API_KEY","OPENAI_API_KEY"]},"install":[{"id":"clone-repo","kind":"shell","command":"git clone https://github.com/SharedIntellect/quorum.git /tmp/quorum-install && cd /tmp/quorum-install/reference-implementation && pip install -r requirements.txt","label":"Clone Quorum repo and install Python dependencies"}],"source":"https://github.com/SharedIntellect/quorum"}}
 ---
 
 # Quorum — Multi-Agent Validation
@@ -10,10 +10,17 @@ Quorum validates AI agent outputs by spawning multiple independent critics that 
 
 ## Quick Start
 
+Clone the repository and install:
+
+```bash
+git clone https://github.com/SharedIntellect/quorum.git
+cd quorum/reference-implementation
+pip install -r requirements.txt
+```
+
 Run a quorum check on any file:
 
 ```bash
-cd reference-implementation
 python -m quorum.cli run --target <path-to-artifact> --rubric <rubric-name>
 ```
 
