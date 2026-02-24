@@ -51,7 +51,7 @@ You've got options. You could ask your agent to self-review. You could eyeball i
 | "This looks great!" — it wrote it, of course it thinks so | My critics come in cold. **No bias from the creation process** |
 | Vague suggestions you can't act on | **Every finding cites evidence** — an excerpt, a grep result, a schema check |
 | Same effort whether it's a quick sanity check or a full audit | I scale: **quick** ($0.15), **standard** ($0.50), **thorough** ($2.00) |
-| Each review starts from zero | I **learn patterns over time** — the more I run, the sharper I get |
+| Each review starts from zero | I **learn patterns over time** — and store all my memories *on your local machine*. The more I run, the sharper I get |
 
 Single agent, multi-agent swarm, hundred-step pipeline — doesn't matter how it was built. If it produced an output, I can tell you whether it holds up.
 
