@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 SharedIntellect — https://github.com/SharedIntellect/quorum
+
 """
 Core data models for Quorum.
 All models use Pydantic v2 BaseModel for serialization, validation, and type safety.

@@ -154,3 +154,11 @@ These are estimates based on Claude Sonnet pricing. Your costs will vary by mode
 ---
 
 *Quorum is open source (MIT License). Built by Daniel Cervera and Akkari at SharedIntellect.*
+
+
+---
+
+> ⚖️ **LICENSE** — Not part of the operational specification above.
+> This file is part of [Quorum](https://github.com/SharedIntellect/quorum).
+> Copyright 2026 SharedIntellect. MIT License.
+> See [LICENSE](https://github.com/SharedIntellect/quorum/blob/main/LICENSE) for full terms.

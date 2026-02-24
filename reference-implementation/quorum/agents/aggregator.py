@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 SharedIntellect — https://github.com/SharedIntellect/quorum
+
 """
 Aggregator Agent — Deduplicates findings, resolves conflicts, produces verdict.
 

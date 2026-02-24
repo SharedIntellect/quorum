@@ -356,3 +356,11 @@ quorum run \
 ---
 
 *Quorum is a pattern, not a product. Adapt freely. Contribute back what you learn.*
+
+
+---
+
+> ⚖️ **LICENSE** — Not part of the operational specification above.
+> This file is part of [Quorum](https://github.com/SharedIntellect/quorum).
+> Copyright 2026 SharedIntellect. MIT License.
+> See [LICENSE](https://github.com/SharedIntellect/quorum/blob/main/LICENSE) for full terms.

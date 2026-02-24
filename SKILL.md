@@ -86,3 +86,11 @@ Each finding includes: severity (CRITICAL/HIGH/MEDIUM/LOW), evidence citations p
 - [MODEL_REQUIREMENTS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/MODEL_REQUIREMENTS.md) — Supported models and tiers
 - [CONFIG_REFERENCE.md](https://github.com/SharedIntellect/quorum/blob/main/docs/CONFIG_REFERENCE.md) — All configuration options
 - [FOR_BEGINNERS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/FOR_BEGINNERS.md) — New to agent validation? Start here
+
+
+---
+
+> ⚖️ **LICENSE** — Not part of the operational specification above.
+> This file is part of [Quorum](https://github.com/SharedIntellect/quorum).
+> Copyright 2026 SharedIntellect. MIT License.
+> See [LICENSE](https://github.com/SharedIntellect/quorum/blob/main/LICENSE) for full terms.

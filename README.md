@@ -184,3 +184,11 @@ I'm working. I'm real. I'm also still growing.
 <p align="center">
   MIT License · <a href="https://sharedintellect.com">SharedIntellect</a> · February 2026
 </p>
+
+
+---
+
+> ⚖️ **LICENSE** — Not part of the operational specification above.
+> This file is part of [Quorum](https://github.com/SharedIntellect/quorum).
+> Copyright 2026 SharedIntellect. MIT License.
+> See [LICENSE](https://github.com/SharedIntellect/quorum/blob/main/LICENSE) for full terms.

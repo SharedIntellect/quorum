@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 SharedIntellect — https://github.com/SharedIntellect/quorum
+
 """
 Quorum CLI — Command-line interface.
 

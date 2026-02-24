@@ -338,3 +338,11 @@ Quorum is built on these peer-reviewed papers:
 
 **Quorum is production infrastructure, not research.**  
 *Built with rigor, validated by independent experts, ready for deployment.*
+
+
+---
+
+> ⚖️ **LICENSE** — Not part of the operational specification above.
+> This file is part of [Quorum](https://github.com/SharedIntellect/quorum).
+> Copyright 2026 SharedIntellect. MIT License.
+> See [LICENSE](https://github.com/SharedIntellect/quorum/blob/main/LICENSE) for full terms.

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 SharedIntellect — https://github.com/SharedIntellect/quorum
+
 """
 Grep tool — file and pattern search with context lines.
 

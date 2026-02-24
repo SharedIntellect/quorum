@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 SharedIntellect — https://github.com/SharedIntellect/quorum
+
 """
 Configuration system for Quorum.
 Loads YAML depth profiles and merges CLI overrides.

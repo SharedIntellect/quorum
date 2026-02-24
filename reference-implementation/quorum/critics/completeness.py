@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 SharedIntellect — https://github.com/SharedIntellect/quorum
+
 """
 Completeness Critic — Coverage gaps, missing requirements, unaddressed edge cases.
 

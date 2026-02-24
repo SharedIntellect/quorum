@@ -70,3 +70,11 @@ Costs scale roughly linearly with critic count and artifact size. The `quick` de
 Quorum is designed for **OpenClaw** and tested primarily on that platform. The architecture is intentionally model-agnostic — the spec and rubric format don't assume a specific provider. Cross-platform compatibility with other agent frameworks is under active research.
 
 If you're running Quorum on a non-OpenClaw platform and want to share results, [open an issue](https://github.com/SharedIntellect/quorum/issues).
+
+
+---
+
+> ⚖️ **LICENSE** — Not part of the operational specification above.
+> This file is part of [Quorum](https://github.com/SharedIntellect/quorum).
+> Copyright 2026 SharedIntellect. MIT License.
+> See [LICENSE](https://github.com/SharedIntellect/quorum/blob/main/LICENSE) for full terms.

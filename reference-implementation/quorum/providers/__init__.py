@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 SharedIntellect — https://github.com/SharedIntellect/quorum
+
 """LLM provider abstraction layer."""
 
 from quorum.providers.base import BaseProvider
