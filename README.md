@@ -63,6 +63,12 @@ You wouldn't ship code without tests. I'm here so you don't ship AI outputs with
 
 It takes about 30 seconds:
 
+**From ClawHub (one line):**
+```bash
+openclaw skills add dacervera/quorum
+```
+
+**Or from source:**
 ```bash
 git clone https://github.com/SharedIntellect/quorum.git
 cd quorum/reference-implementation
@@ -70,6 +76,8 @@ pip install -e .
 export ANTHROPIC_API_KEY=your-key    # or OPENAI_API_KEY, etc.
 quorum run --target examples/sample-research.md --depth quick
 ```
+
+[![Available on ClawHub](https://img.shields.io/badge/ClawHub-dacervera%2Fquorum-2ba4c8)](https://clawhub.ai/dacervera/quorum)
 
 First time? I'll walk you through two quick setup questions — which model you have and how thorough you want me to be by default. I'll save your preferences so we only do this once.
 
