@@ -19,6 +19,24 @@ The boundary is clean: when code hygiene detects a pattern that has security imp
 
 ---
 
+## Status
+
+**v0.5.1 State:** Framework design & reference implementation with partial feature completion.
+
+- [x] Framework design and documentation
+- [x] 12 evaluation categories specified
+- [x] ISO/IEC 25010:2023 (Maintainability + Reliability) grounding
+- [x] Two-layer architecture (deterministic + LLM) with delegation boundaries
+- [ ] Full SAST tool integration (Ruff/Pylint) — Milestone #15, v0.5.2
+- [ ] Business logic validation workflow (SEC-02) — v0.5.3 planned
+- [ ] Learning memory wiring — v0.6+
+
+**Known Limitations:**
+- Pre-screen layer runs 10 regex checks; deterministic Python analyzer not fully integrated
+- Business logic checks require specification/requirements context (not yet automated)
+
+---
+
 ## Table of Contents
 
 1. [Scope Decisions: What ISO 25010 Maps to Code Review](#1-scope-decisions)

@@ -9,12 +9,12 @@
 
 ## 1. Overview
 
-Quorum is a nine-agent quality assurance system designed to rigorously evaluate multi-agent systems, configurations, research, code, and operational procedures against domain-specific rubrics. It combines:
+Quorum is a quality assurance framework with a nine-agent target architecture. Currently, 4 critics are implemented (Correctness, Completeness, Security, Code Hygiene), with 5 additional critics planned. The framework is designed to rigorously evaluate multi-agent systems, configurations, research, code, and operational procedures against domain-specific rubrics. It combines:
 
 - **Parallel specialized critics** (9 agents with distinct expertise)
 - **Grounded evidence requirement** (every critique must cite tool-verified proof)
 - **Intelligent delegation** (Tomasev et al., 2026 principles)
-- **Learning memory** (persistent failure-pattern accumulation)
+- **Specified learning memory** (persistent failure-pattern accumulation; not yet wired into production runs)
 - **Cost-aware depth control** (three execution profiles for different budgets)
 
 Quorum treats validation as infrastructure, not an afterthought.
@@ -353,7 +353,7 @@ Rules:
 - Patterns with frequency ≥ 5 trigger **automation opportunities** (design tools to check this deterministically)
 - Patterns go stale after 60 days without recurrence (removed from mandatory list)
 
-This is real lifelong learning at the system level.
+This is the planned system-level learning architecture. Implementation is v0.6+.
 
 ---
 
@@ -468,8 +468,8 @@ Quorum is built on these peer-reviewed papers:
 
 ---
 
-**Quorum is production infrastructure, not research.**  
-*Built with rigor, validated by independent experts, ready for deployment.*
+**Quorum is a production-oriented, early-stage validation framework.**  
+*Architecture is sound and tested, but the product is still growing: no test suite, no CI, 4/9 critics shipped, learning/trust/monitoring systems specified but not wired.*
 
 
 ---

@@ -1,9 +1,21 @@
 # Cross-Artifact Consistency — Design Decisions
 
-**Status:** Implemented in v0.5.0  
+**Status:** Fully implemented in v0.5.1  
 **Date:** 2026-03-06  
 **Roadmap:** Item #6  
 **Depends on:** Milestone #2 (multi-file/batch) — shipped in v0.2.0
+
+---
+
+## Implementation Status
+
+**v0.5.1 State:** Fully implemented in reference implementation.
+
+- [x] Relationship manifest schema (quorum-relationships.yaml)
+- [x] Multi-locus findings with role annotations
+- [x] Source hash (SHA-256) for drift detection
+- [x] Phase 2 orchestration with findings-only (not verdicts) passing
+- [x] Assessor independence principle enforced in architecture
 
 ---
 

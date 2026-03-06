@@ -9,6 +9,25 @@
 
 ---
 
+## Status
+
+**v0.5.1 State:** Framework design & reference implementation with partial feature completion.
+
+- [x] Framework design and documentation
+- [x] 14 evaluation categories (SEC-01–SEC-14) specified
+- [x] OWASP ASVS 5.0, CWE Top 25, NIST SP 800-53 SA-11 grounding
+- [x] Detection capability matrix for SAST vs LLM judgment boundaries
+- [ ] Full SAST tool integration (Ruff/Bandit/PSScriptAnalyzer) — Milestone #15, v0.5.2
+- [ ] Threat model context feeding for SEC-04 (Authorization) — v0.5.3 planned
+- [ ] Learning memory wiring (issue tracking) — v0.6+
+
+**Known Limitations:**
+- Pre-screen layer runs 10 regex checks; 80+ referenced SAST rules not yet integrated
+- Authorization review (SEC-04) is speculative without threat model context
+- PowerShell coverage ~70% vs 85%+ for Python (tooling ecosystem gap)
+
+---
+
 ## Table of Contents
 
 1. [Evaluation Categories](#1-evaluation-categories)

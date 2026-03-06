@@ -182,11 +182,13 @@ Just a model that can reason well. I'll figure out the rest.
 | **Recommended** | Claude Opus 4.6+, GPT-5.2+ | Full capability — judgment-heavy work (thorough depth, cross-artifact consistency) benefits substantially from frontier reasoning |
 | **Great** | Claude Sonnet 4.6+, Gemini 2.0+ | Excellent for quick and standard depth — most validation work lives here |
 | **Functional** | Claude Haiku 4.5+, GPT-4o | I'll still help, but with less depth on nuanced findings |
-| **Not enough** | Llama 70B, most open models (early 2026) | I need more reasoning power than these can give me |
+| **Untested** | Llama 70B, most open models (early 2026) | Not yet evaluated in Quorum; may lack the reasoning depth for judgment-heavy criteria |
 
 **Model routing tip:** For `--depth thorough` or `--relationships` runs, set `model_tier1` to a frontier model (Opus, GPT-5.2) in your config. Quick and standard runs work great with Sonnet-class models on both tiers. See depth configs in `quorum/configs/` for defaults.
 
 I auto-detect your model on first run and configure myself accordingly. Details: [MODEL_REQUIREMENTS.md](docs/MODEL_REQUIREMENTS.md)
+
+**Note on model assessment:** These recommendations are based on architectural requirements (reasoning depth, token budget for multi-stage evaluation). Assessments are not backed by empirical Quorum benchmarks yet. Users are encouraged to test with their preferred models.
 
 ---
 

@@ -108,18 +108,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [x] Security critic — framework-grounded (Milestone #4) ← **DONE**
 - [x] Code hygiene critic (Milestone #5) ← **DONE**
 - [x] Cross-artifact consistency (Milestone #6) ← **DONE**
-- [ ] Confidence calibration (Milestone #6b)
-- [ ] Learning memory (Milestone #7)
-- [ ] Fix loops (Milestone #5b)
 - [x] Parallel critic execution (Milestone #8) ← **DONE**
 - [x] Parallel batch validation (Milestone #8b) ← **DONE**
 - [x] Python code rubric — 25 criteria, auto-detect on .py ← **DONE**
 - [x] Fix loops / Fixer agent (Milestone #5b) ← **DONE** (proposals; re-validation loops future)
-- [ ] Python rubric framework grounding — research swarm for PEP 8/257/484, Python antipatterns literature, map criteria to published sources with citations (same rigor as SEC/hygiene frameworks)
+- [ ] **Test suite + CI** (Milestone #13) — pytest smoke tests, import checks, GitHub Actions. Credibility gate: no tests = not production-ready. (Grok + GPT 5.4)
+- [ ] **Claim discipline audit** — GPT 5.4 scored 2.5/5 on both README and SPEC. Fix: README ("production-grade"), GitHub org/repo descriptions ("9 critics" + "learning memory"), model table ("not enough" without benchmarks), SPEC §1 framing (nine-agent → target architecture), research citations (Tomasev/ToolMaker = "engineering interpretation of," not "validated by")
+- [ ] **Pre-screen expansion** (Milestone #15) — Wire actual SAST tools: `ruff check` (S1xx+), `bandit`, `PSScriptAnalyzer`. Current 10 regex checks become universal fallback. Frameworks reference 80+ rules from research corpus — integrate them. (Devola)
+- [ ] Re-validation loops — apply Fixer proposals → re-run critics → verify (Milestone #5c)
+- [ ] Python rubric framework grounding — research swarm for PEP 8/257/484, Python antipatterns literature, map criteria to published sources with citations
 - [ ] Architecture critic (Milestone #9)
 - [ ] Tester critic (Milestone #10)
 - [ ] Confidence calibration (Milestone #6b)
-- [ ] Learning memory (Milestone #7)
+- [ ] **Learning memory** (Milestone #7) — wire up known_issues.json frequency tracking + mandatory check promotion
+- [ ] **PyPI publish** (Milestone #14) — `pip install quorum-ai` instead of clone + install
 - [ ] Delegation critic (Milestone #11)
 - [ ] Style critic (Milestone #12)
 - [ ] Documentation headers adoption (Phase 1–4)
