@@ -1,6 +1,6 @@
 # Cross-Artifact Consistency — Design Decisions
 
-**Status:** Implemented in v0.3.0  
+**Status:** Implemented in v0.5.0  
 **Date:** 2026-03-06  
 **Roadmap:** Item #6  
 **Depends on:** Milestone #2 (multi-file/batch) — shipped in v0.2.0

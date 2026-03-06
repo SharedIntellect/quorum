@@ -13,7 +13,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ba4c8.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/platform-OpenClaw-2ba4c8" alt="Platform: OpenClaw">
-  <img src="https://img.shields.io/badge/status-v0.3.0-2ba4c8" alt="Status: v0.3.0">
+  <img src="https://img.shields.io/badge/status-v0.5.0-2ba4c8" alt="Status: v0.5.0">
   <a href="https://clawhub.ai/dacervera/quorum"><img src="https://img.shields.io/badge/ClawHub-dacervera%2Fquorum-2ba4c8" alt="Available on ClawHub"></a>
 </p>
 
@@ -190,7 +190,7 @@ I auto-detect your model on first run and configure myself accordingly. Details:
 
 I'm working. I'm real. I'm also still growing.
 
-**What I can do today** (v0.3.0):
+**What I can do today** (v0.5.0):
 - Full CLI: `quorum run --target <file> [--depth] [--rubric] [--pattern] [--relationships] [--output-dir] [--verbose]`
 - **4 critics** — Correctness, Completeness, Security (OWASP ASVS 5.0, CWE Top 25, NIST SA-11), Code Hygiene (ISO 25010:2023, CISQ) — all with evidence grounding
 - **Deterministic pre-screen** — 10 fast checks (hardcoded paths, credentials, PII, JSON/YAML/Python syntax, broken links, TODOs, whitespace, empty files) before any LLM runs

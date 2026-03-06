@@ -100,7 +100,7 @@ High-frequency patterns automatically promote to mandatory checks in future runs
 
 Three execution profiles balance rigor, speed, and cost:
 
-| Depth | Critics (v0.3.0) | Fix Loops | Runtime | Use Case |
+| Depth | Critics (v0.5.0) | Fix Loops | Runtime | Use Case |
 |-------|---------|-----------|---------|----------|
 | **quick** | Correctness, Completeness | 0 | 5-10 min | Fast feedback; low stakes |
 | **standard** | + Security, Code Hygiene | 0 (loops planned) | 15-30 min | Most work; default |
@@ -394,7 +394,7 @@ Additional runs on related artifacts reuse critic prompts and tools, amortizing 
 
 ## 8. Implementation Checklist
 
-Status as of v0.3.0 (reference implementation):
+Status as of v0.5.0 (reference implementation):
 
 - [x] LLM provider — LiteLLM universal provider (100+ models, any tier combination)
 - [x] File-based artifact passing (no in-memory state between agents)
