@@ -13,7 +13,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ba4c8.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/platform-OpenClaw-2ba4c8" alt="Platform: OpenClaw">
-  <img src="https://img.shields.io/badge/status-v0.5.0-2ba4c8" alt="Status: v0.5.0">
+  <img src="https://img.shields.io/badge/status-v0.5.1-2ba4c8" alt="Status: v0.5.1">
   <a href="https://clawhub.ai/dacervera/quorum"><img src="https://img.shields.io/badge/ClawHub-dacervera%2Fquorum-2ba4c8" alt="Available on ClawHub"></a>
 </p>
 
@@ -135,7 +135,7 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
           ┌───────┴─────────┐
           │   Supervisor    │  I pick the right critics for the job
           └───────┬─────────┘
-                  │ Phase 1: spawns critics (parallel)
+                  │ Phase 1: spawns critics (parallel, ThreadPoolExecutor max 4)
    ┌──────────────┼──────────────────────────┐
    │    Critics (working independently)      │
    │  ┌──────────┐ ┌──────────┐             │
@@ -148,6 +148,10 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
    │  │ Arch │ │Deleg │ │ Tester │ ← roadmap│
    │  └──────┘ └──────┘ └────────┘         │
    └──────────────┬───────────────────────────┘
+                  │ Phase 1.5: (if max_fix_loops > 0)
+          ┌───────┴─────────┐
+          │   Fixer Agent   │  proposes text replacements for CRITICAL/HIGH findings
+          └───────┬─────────┘
                   │ Phase 2: (if --relationships provided)
           ┌───────┴──────────────┐
           │  Cross-Artifact      │  checks consistency between your files
@@ -163,7 +167,7 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
           └─────────────────┘
 ```
 
-You tell me what "good" looks like by giving me a rubric — a JSON file with your evaluation criteria. I ship with two built-in rubrics (research-synthesis, agent-config). Need one for your domain? → [RUBRIC_BUILDING_GUIDE.md](docs/RUBRIC_BUILDING_GUIDE.md) walks you through the process step by step.
+You tell me what "good" looks like by giving me a rubric — a JSON file with your evaluation criteria. I ship with three built-in rubrics (research-synthesis, agent-config, python-code). Need one for your domain? → [RUBRIC_BUILDING_GUIDE.md](docs/RUBRIC_BUILDING_GUIDE.md) walks you through the process step by step.
 
 The research I'm built on: [Reflexion](https://arxiv.org/abs/2303.11366), [Council as Judge](https://arxiv.org/abs/2310.00077), Intelligent Delegation (Tomasev et al., 2026), [LATM](https://arxiv.org/abs/2305.17126). Full architecture: [SPEC.md](SPEC.md).
 
@@ -190,14 +194,16 @@ I auto-detect your model on first run and configure myself accordingly. Details:
 
 I'm working. I'm real. I'm also still growing.
 
-**What I can do today** (v0.5.0):
+**What I can do today** (v0.5.1):
 - Full CLI: `quorum run --target <file> [--depth] [--rubric] [--pattern] [--relationships] [--output-dir] [--verbose]`
 - **4 critics** — Correctness, Completeness, Security (OWASP ASVS 5.0, CWE Top 25, NIST SA-11), Code Hygiene (ISO 25010:2023, CISQ) — all with evidence grounding
+- **Parallel execution** — critics run concurrently (ThreadPoolExecutor, max 4); batch files run concurrently (max 3)
+- **Fixer agent** — proposes concrete text replacements for CRITICAL/HIGH findings; activates at `--depth thorough` (or when `max_fix_loops > 0`)
 - **Deterministic pre-screen** — 10 fast checks (hardcoded paths, credentials, PII, JSON/YAML/Python syntax, broken links, TODOs, whitespace, empty files) before any LLM runs
 - **Batch validation** — `--target ./dir/` or `--pattern "*.md"` to validate many files at once; get a consolidated `BatchVerdict`
 - **Cross-artifact consistency** — `--relationships quorum-relationships.yaml` to declare implements/documents/delegates relationships between files and check them
 - **Custom rubric loading** — `--rubric ./my-rubric.json`
-- 2 built-in rubrics (research-synthesis, agent-config)
+- 3 built-in rubrics (research-synthesis, agent-config, python-code — auto-detected on `.py` files)
 - Auto-configuration on first run
 - LiteLLM universal provider (100+ models)
 - Full audit trail for every run (timestamped run directory with prescreen.json, critic JSONs, verdict.json, report.md)
@@ -205,7 +211,7 @@ I'm working. I'm real. I'm also still growing.
 
 **What's coming:**
 - More critics (Architecture, Delegation, Style, Tester)
-- Fix loops — I'll propose fixes, not just findings (wired up, coming soon)
+- Re-validation loops (apply fixes → re-run critics → verify)
 - PKI/compliance rubric packs (RFC 3647, RFC 5280, CA/B Forum Baselines, WebTrust, ISO 19790, NIST SP 800-57/130/152)
 - Learning memory that sharpens over time
 - Confidence calibration
@@ -220,6 +226,7 @@ Rubrics are what make me domain-useful. I'm building a library:
 **Shipped:**
 - `research-synthesis` — evaluates research reports and AI-generated analyses
 - `agent-config` — evaluates agent configuration files
+- `python-code` — evaluates Python source files (25 criteria, PC-001–PC-025; auto-detected on `.py` files)
 
 **In development — PKI/compliance:**
 - NIST SP 800-57 (Key Management Recommendations) — *rubric drafted*

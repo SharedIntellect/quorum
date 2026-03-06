@@ -4,6 +4,32 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.1] — 2026-03-06
+
+### Added — Parallel Execution, Python Code Rubric, Fixer Agent
+
+#### Parallel Critic Execution
+- **Critics run concurrently** via `ThreadPoolExecutor` (max 4 critics in parallel)
+- **Batch files run concurrently** (max 3 files processed simultaneously)
+- Significant throughput improvement for multi-critic and batch validation runs
+
+#### Python Code Rubric (NEW)
+- **New built-in rubric: `python-code`** — 25 criteria (PC-001–PC-025)
+- **Auto-detection** — rubric is automatically selected when `--target` is a `.py` file and no rubric is specified
+- 3 built-in rubrics now shipped: `research-synthesis`, `agent-config`, `python-code`
+
+#### Fixer Agent (NEW — Phase 1.5)
+- **New agent: Fixer** — activates when `max_fix_loops > 0` (thorough depth default: 1)
+- **Proposal mode** — proposes concrete text replacements for CRITICAL/HIGH findings
+- **Pipeline position:** Phase 1.5, between critic dispatch and cross-artifact consistency
+- Re-validation loops (apply proposals → re-run critics → verify) are deferred to a future release
+
+### Self-Validation
+- Ran Quorum against itself using the new Python code rubric
+- Result: REVISE, 16 findings — pipeline refactor in progress
+
+---
+
 ## [0.5.0] — 2026-03-06
 
 ### Added — Framework-Grounded Critics

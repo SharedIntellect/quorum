@@ -95,11 +95,11 @@ quorum run \
 
 ## Depth Profiles
 
-| Depth | Critics | Use For |
-|-------|---------|---------|
-| `quick` | correctness, completeness | Fast feedback, drafts |
-| `standard` | correctness, completeness, security, code_hygiene | Most work, PR reviews |
-| `thorough` | all 4 shipped critics (more as they land) | Critical decisions, production changes |
+| Depth | Critics | Fix Loops | Use For |
+|-------|---------|-----------|---------|
+| `quick` | correctness, completeness | 0 | Fast feedback, drafts |
+| `standard` | correctness, completeness, security, code_hygiene | 0 | Most work, PR reviews |
+| `thorough` | all 4 shipped critics (more as they land) | 1 (Fixer proposals) | Critical decisions, production changes |
 
 All depth profiles include the deterministic **pre-screen** (10 checks, no LLM cost) before any critics run.
 
@@ -115,6 +115,7 @@ Rubrics define what "good" looks like for a domain. Built-in rubrics:
 |------|--------|----------|
 | `research-synthesis` | Research documents | Citations, logic, completeness, causation |
 | `agent-config` | Agent configurations | Model assignments, permissions, error handling |
+| `python-code` | Python source files | 25 criteria (PC-001–PC-025); auto-detected on `.py` files |
 
 ```bash
 # List available rubrics
@@ -184,12 +185,17 @@ pipeline.py          load config, rubric, artifact
 prescreen.py         10 deterministic checks (PS-001–PS-010)
                      → prescreen.json (no LLM, runs instantly)
   ↓
-supervisor.py        Phase 1: classify domain, dispatch critics in parallel
+supervisor.py        Phase 1: classify domain, dispatch critics concurrently
+                     (ThreadPoolExecutor, max 4 critics in parallel;
+                      batch files run concurrently max 3)
   ↓
 correctness.py    }
-completeness.py   }  each critic → LLM → structured findings
+completeness.py   }  each critic → LLM → structured findings (parallel)
 security.py       }  (framework-grounded: OWASP ASVS, CWE, NIST SA-11,
 code_hygiene.py   }   ISO 25010:2023, CISQ)
+  ↓
+fixer.py             Phase 1.5: proposes text replacements for CRITICAL/HIGH
+                     (only if max_fix_loops > 0; thorough depth default: 1)
   ↓
 cross_artifact.py    Phase 2: cross-artifact consistency critic
                      (only if --relationships provided)

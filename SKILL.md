@@ -1,6 +1,6 @@
 ---
 name: quorum
-description: Multi-agent validation framework (v0.5.0). Deterministic pre-screen + 4 independent AI critics evaluate artifacts (documents, configs, code, research) against rubrics with evidence-grounded findings. Supports batch validation and cross-artifact consistency checks.
+description: Multi-agent validation framework (v0.5.1). Deterministic pre-screen + 4 independent AI critics (parallel execution) evaluate artifacts (documents, configs, code, research) against rubrics with evidence-grounded findings. Fixer agent proposes text replacements for CRITICAL/HIGH issues. 3 built-in rubrics (research-synthesis, agent-config, python-code). Supports batch validation and cross-artifact consistency checks.
 metadata: {"openclaw":{"requires":{"bins":["python3","pip"],"env":["ANTHROPIC_API_KEY","OPENAI_API_KEY"]},"install":[{"id":"clone-repo","kind":"shell","command":"git clone https://github.com/SharedIntellect/quorum.git /tmp/quorum-install && cd /tmp/quorum-install/reference-implementation && pip install -r requirements.txt","label":"Clone Quorum repo and install Python dependencies"}],"source":"https://github.com/SharedIntellect/quorum"}}
 ---
 
@@ -30,6 +30,7 @@ python -m quorum.cli run --target <path-to-artifact> --rubric <rubric-name>
 
 - `research-synthesis` — Research reports, literature reviews, technical analyses
 - `agent-config` — Agent configurations, YAML specs, system prompts
+- `python-code` — Python source files (25 criteria, PC-001–PC-025; auto-detected on `.py` files)
 
 ### Depth Profiles
 

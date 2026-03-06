@@ -14,6 +14,7 @@ Flow:
 
 from __future__ import annotations
 
+import asyncio
 import glob as glob_mod
 import json
 import logging
@@ -38,6 +39,134 @@ DEFAULT_RUNS_DIR = Path("quorum-runs")
 MAX_BATCH_WORKERS = 3
 
 
+def _load_and_save_inputs(
+    target: Path,
+    config: QuorumConfig,
+    rubric_name: str | None,
+    runs_dir: Path,
+    relationships_path: Path | None,
+) -> tuple[str, "RubricLoader", Path]:
+    """Load artifact, select rubric, create run directory, save inputs."""
+    artifact_text = target.read_text(encoding="utf-8", errors="replace")
+    loader = RubricLoader()
+    rubric = _select_rubric(loader, rubric_name, target, artifact_text, config)
+    run_dir = _create_run_dir(runs_dir or DEFAULT_RUNS_DIR, target)
+    # Run manifest (per-file validation metadata — differs from batch-manifest.json)
+    _write_json(run_dir / "run-manifest.json", {
+        "target": str(target),
+        "depth": config.depth_profile,
+        "rubric": rubric.name,
+        "critics": config.critics,
+        "prescreen_enabled": config.enable_prescreen,
+        "relationships_path": str(relationships_path) if relationships_path else None,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    })
+    (run_dir / "artifact.txt").write_text(artifact_text, encoding="utf-8")
+    _write_json(run_dir / "rubric.json", rubric.model_dump())
+    return artifact_text, rubric, run_dir
+
+
+def _run_prescreen(
+    config: QuorumConfig,
+    target: Path,
+    artifact_text: str,
+    run_dir: Path,
+) -> "object | None":
+    """Run deterministic pre-screen if enabled. Returns PreScreenResult or None."""
+    if not config.enable_prescreen:
+        return None
+    try:
+        from quorum.prescreen import PreScreen
+        prescreener = PreScreen()
+        result = prescreener.run(target, artifact_text)
+        _write_json(run_dir / "prescreen.json", result.model_dump())
+        logger.info(
+            "Pre-screen: %d passed, %d failed, %d skipped",
+            result.passed, result.failed, result.skipped,
+        )
+        return result
+    except Exception as e:
+        # V004 fix: pre-screen failure should not kill the entire validation run
+        logger.warning("Pre-screen failed, continuing without: %s", e)
+        return None
+
+
+def _run_phase2(
+    config: QuorumConfig,
+    provider: object,
+    critic_results: list,
+    relationships_path: Path,
+    run_dir: Path,
+) -> list:
+    """Run Phase 2 cross-artifact consistency if relationships provided."""
+    from quorum.relationships import load_manifest, resolve_relationships
+    from quorum.critics.cross_consistency import CrossConsistencyCritic
+
+    # Manifest paths are relative to the manifest's directory, not the target's
+    manifest_base = relationships_path.parent.resolve()
+    relationships = load_manifest(relationships_path, base_dir=manifest_base)
+    resolved = resolve_relationships(relationships, base_dir=manifest_base)
+
+    # Collect Phase 1 findings (NOT verdicts) as context
+    phase1_findings: list = []
+    for cr in critic_results:
+        if not cr.skipped:
+            phase1_findings.extend(cr.findings)
+
+    cross_critic = CrossConsistencyCritic(provider=provider, config=config)
+    cross_result = cross_critic.evaluate(resolved, phase1_findings)
+
+    _write_json(
+        run_dir / "critics" / "cross_consistency-findings.json",
+        cross_result.model_dump(),
+    )
+    critic_results.append(cross_result)
+
+    logger.info(
+        "Phase 2 complete: %d cross-artifact findings across %d relationships",
+        len(cross_result.findings), len(relationships),
+    )
+    return critic_results
+
+
+def _update_manifest(
+    run_dir: Path,
+    config: QuorumConfig,
+    prescreen_result: object,
+    verdict: Verdict,
+    critic_results: list,
+    relationships_path: Path | None,
+) -> None:
+    """Update run manifest with final stats."""
+    prescreen_stats: dict = {"prescreen_enabled": config.enable_prescreen}
+    if prescreen_result is not None:
+        prescreen_stats.update({
+            "prescreen_checks": prescreen_result.total_checks,
+            "prescreen_passed": prescreen_result.passed,
+            "prescreen_failed": prescreen_result.failed,
+            "prescreen_skipped": prescreen_result.skipped,
+            "prescreen_runtime_ms": prescreen_result.runtime_ms,
+            "prescreen_has_failures": prescreen_result.has_failures,
+        })
+    manifest_path = run_dir / "run-manifest.json"
+    with open(manifest_path) as f:
+        manifest_data = json.load(f)
+    manifest_data.update(prescreen_stats)
+    manifest_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+    manifest_data["verdict"] = verdict.status.value
+    manifest_data["total_findings"] = len(verdict.report.findings) if verdict.report else 0
+    # Count cross-artifact relationships evaluated (if Phase 2 ran)
+    cross_result_list = [cr for cr in critic_results if cr.critic_name == "cross_consistency"]
+    if cross_result_list and relationships_path is not None:
+        try:
+            from quorum.relationships import load_manifest
+            rels = load_manifest(relationships_path, base_dir=relationships_path.parent.resolve())
+            manifest_data["relationships_count"] = len(rels)
+        except Exception:
+            pass
+    _write_json(manifest_path, manifest_data)
+
+
 def run_validation(
     target_path: str | Path,
     depth: str = "quick",
@@ -59,7 +188,7 @@ def run_validation(
                             cross-artifact consistency validation
 
     Returns:
-        (Verdict, run_directory_path) — the verdict and where outputs were written
+        Tuple of (Verdict, run_dir) — the final verdict and the Path to the run output directory
     """
     target = Path(target_path)
     if not target.exists():
@@ -70,48 +199,12 @@ def run_validation(
         from quorum.config import load_config
         config = load_config(depth=depth)
 
-    # Read artifact
-    artifact_text = target.read_text(encoding="utf-8", errors="replace")
+    artifact_text, rubric, run_dir = _load_and_save_inputs(
+        target, config, rubric_name, runs_dir, relationships_path,
+    )
 
-    # Load rubric
-    loader = RubricLoader()
-    rubric = _select_rubric(loader, rubric_name, target, artifact_text, config)
-
-    # Create run directory
-    run_dir = _create_run_dir(runs_dir or DEFAULT_RUNS_DIR, target)
-
-    # Save inputs to run dir (for auditability)
-    _write_json(run_dir / "run-manifest.json", {
-        "target": str(target),
-        "depth": config.depth_profile,
-        "rubric": rubric.name,
-        "critics": config.critics,
-        "prescreen_enabled": config.enable_prescreen,
-        "relationships_path": str(relationships_path) if relationships_path else None,
-        "started_at": datetime.now(timezone.utc).isoformat(),
-    })
-    (run_dir / "artifact.txt").write_text(artifact_text, encoding="utf-8")
-    _write_json(run_dir / "rubric.json", rubric.model_dump())
-
-    # Build provider
     provider = LiteLLMProvider(api_keys=config.api_keys)
-
-    # Run pre-screen (deterministic checks) if enabled
-    prescreen_result = None
-    if config.enable_prescreen:
-        try:
-            from quorum.prescreen import PreScreen
-            prescreener = PreScreen()
-            prescreen_result = prescreener.run(target, artifact_text)
-            _write_json(run_dir / "prescreen.json", prescreen_result.model_dump())
-            logger.info(
-                "Pre-screen: %d passed, %d failed, %d skipped",
-                prescreen_result.passed, prescreen_result.failed, prescreen_result.skipped,
-            )
-        except Exception as e:
-            # V004 fix: pre-screen failure should not kill the entire validation run
-            logger.warning("Pre-screen failed, continuing without: %s", e)
-            prescreen_result = None
+    prescreen_result = _run_prescreen(config, target, artifact_text, run_dir)
 
     # Run supervisor → critics
     supervisor = SupervisorAgent(provider=provider, config=config)
@@ -153,37 +246,10 @@ def run_validation(
     # Phase 2: cross-artifact consistency (runs only when --relationships is provided)
     if relationships_path is not None:
         try:
-            from quorum.relationships import load_manifest, resolve_relationships
-            from quorum.critics.cross_consistency import CrossConsistencyCritic
-
-            # Manifest paths are relative to the manifest's directory, not the target's
-            manifest_base = relationships_path.parent.resolve()
-            relationships = load_manifest(relationships_path, base_dir=manifest_base)
-            resolved = resolve_relationships(relationships, base_dir=manifest_base)
-
-            # Collect Phase 1 findings (NOT verdicts) as context
-            phase1_findings: list = []
-            for cr in critic_results:
-                if not cr.skipped:
-                    phase1_findings.extend(cr.findings)
-
-            cross_critic = CrossConsistencyCritic(provider=provider, config=config)
-            cross_result = cross_critic.evaluate(resolved, phase1_findings)
-
-            _write_json(
-                run_dir / "critics" / "cross_consistency-findings.json",
-                cross_result.model_dump(),
-            )
-            critic_results.append(cross_result)
-
-            logger.info(
-                "Phase 2 complete: %d cross-artifact findings across %d relationships",
-                len(cross_result.findings), len(relationships),
+            critic_results = _run_phase2(
+                config, provider, critic_results, relationships_path, run_dir,
             )
         except Exception as e:
-            # Let cancellation propagate (CancelledError is BaseException in 3.9+,
-            # but check explicitly for older Python compatibility)
-            import asyncio
             if isinstance(e, asyncio.CancelledError):
                 raise
             logger.error("Phase 2 (cross-artifact) failed: %s", e)
@@ -195,8 +261,9 @@ def run_validation(
     try:
         verdict = aggregator.run(critic_results)
     except Exception as e:
+        if isinstance(e, asyncio.CancelledError):
+            raise
         logger.error("Aggregator failed: %s", e)
-        # Construct a minimal REJECT verdict so the run still produces output
         verdict = Verdict(
             status=VerdictStatus.REJECT,
             reasoning=f"Aggregator failed: {e}. Critic results were saved individually.",
@@ -204,39 +271,10 @@ def run_validation(
             report=None,
         )
 
-    # Save outputs
+    # Save outputs and update manifest
     _write_json(run_dir / "verdict.json", verdict.model_dump())
     _write_report(run_dir / "report.md", verdict, target, rubric, config, fix_report=fix_report)
-
-    # Update manifest with prescreen stats now that we have them
-    prescreen_stats: dict = {"prescreen_enabled": config.enable_prescreen}
-    if prescreen_result is not None:
-        prescreen_stats.update({
-            "prescreen_checks": prescreen_result.total_checks,
-            "prescreen_passed": prescreen_result.passed,
-            "prescreen_failed": prescreen_result.failed,
-            "prescreen_skipped": prescreen_result.skipped,
-            "prescreen_runtime_ms": prescreen_result.runtime_ms,
-            "prescreen_has_failures": prescreen_result.has_failures,
-        })
-    # Re-write manifest with complete info
-    manifest_path = run_dir / "run-manifest.json"
-    with open(manifest_path) as f:
-        manifest_data = json.load(f)
-    manifest_data.update(prescreen_stats)
-    manifest_data["completed_at"] = datetime.now(timezone.utc).isoformat()
-    manifest_data["verdict"] = verdict.status.value
-    manifest_data["total_findings"] = len(verdict.report.findings) if verdict.report else 0
-    # Count cross-artifact relationships evaluated (if Phase 2 ran)
-    cross_result_list = [cr for cr in critic_results if cr.critic_name == "cross_consistency"]
-    if cross_result_list and relationships_path is not None:
-        try:
-            from quorum.relationships import load_manifest
-            rels = load_manifest(relationships_path, base_dir=relationships_path.parent.resolve())
-            manifest_data["relationships_count"] = len(rels)
-        except Exception:
-            pass
-    _write_json(manifest_path, manifest_data)
+    _update_manifest(run_dir, config, prescreen_result, verdict, critic_results, relationships_path)
 
     logger.info(
         "Run complete: verdict=%s | %d findings | run_dir=%s",
@@ -314,8 +352,12 @@ def _create_run_dir(runs_dir: Path, target: Path) -> Path:
 def _write_json(path: Path, data: dict) -> None:
     """Write a dict to a JSON file, creating parent dirs as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, default=str)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, default=str)
+    except (OSError, UnicodeEncodeError) as e:
+        logger.error("Failed to write %s: %s", path, e)
+        raise
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -337,13 +379,12 @@ def _validate_path(path: Path, boundary: Path | None = None) -> Path:
     Args:
         path:     Path to validate
         boundary: If set, resolved path must be under this directory.
-                  If None, uses the path's own parent (no traversal out of target dir).
 
     Returns:
         Resolved (absolute) path
 
     Raises:
-        ValueError: If the path escapes the boundary
+        ValueError: If the path escapes the boundary (path traversal attempt)
     """
     resolved = path.resolve()
 
@@ -388,6 +429,19 @@ def resolve_targets(
         FileNotFoundError: If target doesn't exist or no files match
         ValueError: If any resolved path escapes the boundary
     """
+    # Input validation
+    target_str = str(target)
+    if "\x00" in target_str:
+        raise ValueError("Target path contains null bytes")
+    if pattern is not None:
+        if "\x00" in pattern:
+            raise ValueError("Pattern contains null bytes")
+        if ".." in pattern:
+            raise ValueError(f"Pattern contains path traversal: {pattern}")
+        # Reject patterns with shell-dangerous characters
+        if any(c in pattern for c in ["|", ";", "&", "$", "`"]):
+            raise ValueError(f"Pattern contains disallowed characters: {pattern}")
+
     target = Path(target)
 
     # Single file
@@ -561,7 +615,7 @@ def run_batch_validation(
             ): file_path
             for i, file_path in enumerate(files, 1)
         }
-        for future in as_completed(futures):
+        for future in as_completed(futures, timeout=3600):  # 1 hour max for entire batch
             result = future.result()
             if isinstance(result, FileResult):
                 file_results.append(result)
@@ -572,6 +626,7 @@ def run_batch_validation(
     batch_verdict = _aggregate_batch(file_results, errors)
 
     # Write batch outputs
+    # Batch manifest (multi-file validation metadata — differs from run-manifest.json per-file format)
     _write_json(batch_dir / "batch-manifest.json", {
         "target": str(target),
         "pattern": pattern,
@@ -664,8 +719,6 @@ def _write_batch_report(
     errors: list[dict],
 ) -> None:
     """Write a consolidated Markdown batch report."""
-    from quorum.models import Severity
-
     lines = [
         "# Quorum Batch Validation Report",
         "",
@@ -719,20 +772,47 @@ def _write_batch_report(
                 all_findings.append((Path(fr.file_path).name, finding))
 
     if all_findings:
-        for sev in [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]:
-            group = [(name, f) for name, f in all_findings if f.severity == sev]
-            if not group:
-                continue
-            lines.append(f"### {sev.value} ({len(group)})")
-            lines.append("")
-            for name, finding in group:
-                lines.append(f"- **`{name}`**: {finding.description[:120]}")
-            lines.append("")
+        lines.extend(_format_findings_by_severity([f for _, f in all_findings]))
     else:
         lines.append("No issues found across any files.")
         lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _format_findings_by_severity(findings) -> list[str]:
+    """Format findings grouped by severity into Markdown lines."""
+    lines = []
+    for sev in [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]:
+        group = [f for f in findings if f.severity == sev]
+        if not group:
+            continue
+        lines.append(f"## {sev.value} ({len(group)})")
+        lines.append("")
+        for i, finding in enumerate(group, 1):
+            lines.append(f"### {i}. {finding.description[:100]}")
+            if finding.location:
+                lines.append(f"**Location:** `{finding.location}`  ")
+            if finding.loci:
+                for locus in finding.loci:
+                    lines.append(
+                        f"**Locus [{locus.role}]:** `{locus.file}:{locus.start_line}-{locus.end_line}`  "
+                    )
+            lines.append(f"**Critic:** {finding.critic}  ")
+            if finding.rubric_criterion:
+                lines.append(f"**Criterion:** {finding.rubric_criterion}  ")
+            if finding.framework_refs:
+                lines.append(f"**Refs:** {', '.join(finding.framework_refs)}  ")
+            lines.append("")
+            lines.append(f"**Evidence ({finding.evidence.tool}):**")
+            lines.append("```")
+            lines.append(finding.evidence.result[:500])
+            lines.append("```")
+            if finding.remediation:
+                lines.append("")
+                lines.append(f"**Suggested fix:** {finding.remediation[:200]}")
+            lines.append("")
+    return lines
 
 
 def _write_report(
@@ -766,37 +846,7 @@ def _write_report(
     ]
 
     if report and report.findings:
-        # Group by severity
-        for sev in [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]:
-            group = [f for f in report.findings if f.severity == sev]
-            if not group:
-                continue
-            lines.append(f"## {sev.value} ({len(group)})")
-            lines.append("")
-            for i, finding in enumerate(group, 1):
-                lines.append(f"### {i}. {finding.description[:100]}")
-                if finding.location:
-                    lines.append(f"**Location:** `{finding.location}`  ")
-                # Multi-locus display (cross-artifact findings)
-                if finding.loci:
-                    for locus in finding.loci:
-                        lines.append(
-                            f"**Locus [{locus.role}]:** `{locus.file}:{locus.start_line}-{locus.end_line}`  "
-                        )
-                lines.append(f"**Critic:** {finding.critic}  ")
-                if finding.rubric_criterion:
-                    lines.append(f"**Criterion:** {finding.rubric_criterion}  ")
-                if finding.framework_refs:
-                    lines.append(f"**Refs:** {', '.join(finding.framework_refs)}  ")
-                lines.append(f"")
-                lines.append(f"**Evidence ({finding.evidence.tool}):**")
-                lines.append(f"```")
-                lines.append(finding.evidence.result[:500])
-                lines.append(f"```")
-                if finding.remediation:
-                    lines.append(f"")
-                    lines.append(f"**Suggested fix:** {finding.remediation[:200]}")
-                lines.append("")
+        lines.extend(_format_findings_by_severity(report.findings))
     else:
         lines.append("## Findings")
         lines.append("")

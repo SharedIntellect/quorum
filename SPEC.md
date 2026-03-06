@@ -100,13 +100,13 @@ High-frequency patterns automatically promote to mandatory checks in future runs
 
 Three execution profiles balance rigor, speed, and cost:
 
-| Depth | Critics (v0.5.0) | Fix Loops | Runtime | Use Case |
+| Depth | Critics (v0.5.1) | Fix Loops | Runtime | Use Case |
 |-------|---------|-----------|---------|----------|
 | **quick** | Correctness, Completeness | 0 | 5-10 min | Fast feedback; low stakes |
-| **standard** | + Security, Code Hygiene | 0 (loops planned) | 15-30 min | Most work; default |
-| **thorough** | All shipped critics | 0 (loops planned) | 30-60 min | Critical decisions; production |
+| **standard** | + Security, Code Hygiene | 0 | 15-30 min | Most work; default |
+| **thorough** | All shipped critics | 1 (proposal mode) | 30-60 min | Critical decisions; production |
 
-Pre-screen (10 deterministic checks, §3.1) runs before LLM critics at all depth levels. Fix loops are configured (capped at 3) but not yet implemented. Full 9-critic panels are the roadmap target for thorough depth.
+Pre-screen (10 deterministic checks, §3.1) runs before LLM critics at all depth levels. Fix loops are implemented (Phase 1.5 — proposal mode). The Fixer proposes text replacements for CRITICAL/HIGH findings when max_fix_loops > 0; re-validation loops (apply → re-run) are deferred. Full 9-critic panels are the roadmap target for thorough depth.
 
 ### 2.6 Transparency Over Convenience
 
@@ -156,7 +156,7 @@ Supervisor (Orchestrator)
 ├─ Delegation Critic (Tier 1)       [SPECIFIED, not yet built]
 ├─ Style Critic (Tier 2)            [SPECIFIED, not yet built]
 ├─ Tester (Tier 2, tools: grep/web/exec) [SPECIFIED, not yet built]
-├─ Fixer (Tier 1, optional)         [SPECIFIED, stubbed at 0 loops]
+├─ Fixer (Tier 1, optional)         [IMPLEMENTED — proposal mode; re-validation loops deferred]
 ├─ Aggregator (Tier 1)              [IMPLEMENTED]
 └─ Supervisor (Tier 1, final)       [IMPLEMENTED]
 ```
@@ -401,15 +401,18 @@ Status as of v0.5.0 (reference implementation):
 - [x] Pre-screen layer — 10 deterministic checks (PS-001–PS-010)
 - [x] 4 critics implemented — Correctness, Completeness, Security, Code Hygiene
 - [x] Cross-Artifact Consistency critic (Phase 2, relationships manifest)
-- [x] Rubric system (JSON schema + validator, 2 built-in rubrics)
+- [x] Rubric system (JSON schema + validator, 3 built-in rubrics: research-synthesis, agent-config, python-code)
 - [x] Batch/multi-file validation with `BatchVerdict`
 - [x] Aggregator synthesis logic (conflict resolution)
 - [x] Verdict assignment logic (PASS/PASS_WITH_NOTES/REVISE/REJECT)
 - [x] Depth preset system (quick/standard/thorough YAML configs)
 - [x] Path traversal security (boundary enforcement)
 - [x] Exit codes (0/1/2)
+- [x] Parallel critic dispatch (ThreadPoolExecutor, max 4 critics; batch files max 3)
+- [x] Fixer agent — proposal mode (Phase 1.5; proposes text replacements for CRITICAL/HIGH)
+- [x] Python code rubric (25 criteria, PC-001–PC-025, auto-detects on .py files)
 - [ ] Remaining 5 critics (Architecture, Delegation, Style, Tester, full Fixer)
-- [ ] Fix loops (config exists, implementation at 0)
+- [ ] Re-validation loops (apply fixes → re-run critics → verify)
 - [ ] Learning memory system (Issue model exists, not wired up)
 - [ ] Trust/monitoring system (per-critic accuracy tracking)
 
@@ -436,7 +439,7 @@ Quorum is built on these peer-reviewed papers:
 ### Current Limitations (v3.0)
 
 - Only **4 of 9 critics are implemented** (Architecture, Delegation, Style, Tester are specified but not built)
-- **Fix loops are stubbed** — config exists (max 3 loops), implementation is at 0
+- **Fix loops are proposal-mode only** — Fixer proposes text replacements; re-validation loops (apply → re-run) are not yet implemented
 - **Learning memory is not wired up** — the `Issue` model exists; pattern accumulation is not connected
 - Rubric panel is **static** (doesn't specialize per artifact type dynamically)
 - **No critic-to-critic debate** (relies on Aggregator to resolve conflicts)
@@ -446,7 +449,7 @@ Quorum is built on these peer-reviewed papers:
 ### Planned
 
 - Remaining critics: Architecture, Delegation, Style, Tester
-- Fix loops — Fixer agent proposes concrete patches for CRITICAL/HIGH findings
+- Re-validation loops — apply Fixer proposals, re-run critics, verify resolution
 - Learning memory — wiring up `known_issues.json` accumulation and mandatory-check promotion
 - Dynamic critic specialization (spawn domain-specific critics on-demand)
 - Critic debate mode (when two critics conflict, run a structured debate)
