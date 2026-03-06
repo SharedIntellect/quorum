@@ -148,8 +148,15 @@ class BaseCritic(abc.ABC):
 
         except Exception as e:
             logger.error("[%s] Evaluation failed: %s", self.name, e)
-            findings = []
-            confidence = 0.0
+            runtime_ms = int(time.time() * 1000) - start_ms
+            return CriticResult(
+                critic_name=self.name,
+                findings=[],
+                confidence=0.0,
+                runtime_ms=runtime_ms,
+                skipped=True,
+                skip_reason=f"Evaluation failed: {e}",
+            )
 
         runtime_ms = int(time.time() * 1000) - start_ms
         logger.info(
@@ -193,7 +200,7 @@ class BaseCritic(abc.ABC):
                     citation=citation,
                 ),
                 location=f.get("location"),
-                critic_source=self.name,
+                critic=self.name,
                 rubric_criterion=citation,
             )
             valid.append(finding)

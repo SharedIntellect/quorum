@@ -19,3 +19,4 @@ branding/previous_concepts/
 launch/
 website/
 workstreams/
+.venv/

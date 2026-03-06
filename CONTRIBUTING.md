@@ -18,6 +18,20 @@ The rubric system is Quorum's most extensible surface. If you've built a rubric 
 - Specialized variants (security-focused, performance-focused)
 - Industry-specific criteria (healthcare, finance, government)
 
+### 🔗 Submit Cross-Artifact Relationship Manifests
+
+Cross-artifact manifests are a new and growing contribution surface. If you have a project structure where multiple files have declared relationships (spec/implementation, schema/consumer, config/profile), contributing a well-structured manifest example helps the community understand how to use `--relationships` effectively.
+
+**How:**
+1. Create a `quorum-relationships.yaml` for a real or representative project
+2. Test it with `quorum run --relationships` against the described files
+3. Open a PR adding it to `examples/relationships/` with a description of the project structure and what consistency checks it enables
+
+**Good manifest contributions:**
+- Real-world project patterns (API spec ↔ handler, OpenAPI schema ↔ consumer)
+- Framework-specific patterns (FastAPI, Django, OpenClaw swarms)
+- Documentation consistency patterns (README ↔ code, SPEC ↔ implementation)
+
 ### 🐛 Bug Reports
 
 Found an issue? Open a GitHub Issue with:

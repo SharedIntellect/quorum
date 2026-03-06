@@ -57,8 +57,13 @@ def cli(verbose: bool) -> None:
 @click.option(
     "--target", "-t",
     required=True,
-    type=click.Path(exists=True, path_type=Path),
-    help="Path to the artifact file to validate",
+    type=str,
+    help="File, directory, or glob pattern to validate",
+)
+@click.option(
+    "--pattern", "-p",
+    default=None,
+    help="Glob filter when target is a directory (e.g. '*.md', '**/*.yaml')",
 )
 @click.option(
     "--depth", "-d",
@@ -85,21 +90,31 @@ def cli(verbose: bool) -> None:
     help="Directory for run outputs (default: ./quorum-runs/)",
 )
 @click.option(
+    "--relationships", "-R",
+    default=None,
+    type=click.Path(exists=True, path_type=Path),
+    help="Path to quorum-relationships.yaml manifest for cross-artifact validation (Phase 2)",
+)
+@click.option(
     "--verbose", "-v",
     is_flag=True,
     default=False,
     help="Print full evidence for all findings (not just CRITICAL/HIGH)",
 )
 def run_cmd(
-    target: Path,
+    target: str,
+    pattern: str | None,
     depth: str,
     rubric: str | None,
     config: Path | None,
     output_dir: Path | None,
+    relationships: Path | None,
     verbose: bool,
 ) -> None:
     """
-    Validate an artifact against a rubric.
+    Validate artifacts against a rubric.
+
+    Supports single files, directories, and glob patterns.
 
     Examples:
 
@@ -107,9 +122,13 @@ def run_cmd(
 
       quorum run --target research.md --depth standard --rubric research-synthesis
 
-      quorum run --target agent.yaml --rubric agent-config --depth thorough
+      quorum run --target ./docs/ --pattern "*.md"
+
+      quorum run --target ./pipeline/ --rubric agent-config --depth thorough
+
+      quorum run --target policy.md --rubric ./rubrics/rfc3647.json
     """
-    from quorum.output import print_verdict, print_error, print_warning
+    from quorum.output import print_verdict, print_batch_verdict, print_error, print_warning
 
     # Check for API keys before doing any work
     if not _has_api_key():
@@ -123,7 +142,7 @@ def run_cmd(
 
     try:
         from quorum.config import load_config, QuorumConfig
-        from quorum.pipeline import run_validation
+        from quorum.pipeline import resolve_targets, run_validation, run_batch_validation
 
         # Load config
         if config:
@@ -131,25 +150,62 @@ def run_cmd(
         else:
             quorum_config = load_config(depth=depth)
 
-        click.echo(
-            f"Running Quorum ({quorum_config.depth_profile} depth, "
-            f"critics: {', '.join(quorum_config.critics)}) ...",
-            err=True,
+        # Resolve targets to determine single vs batch mode
+        target_path = Path(target)
+        is_batch = (
+            target_path.is_dir()
+            or pattern is not None
+            or "*" in target
+            or "?" in target
         )
 
-        verdict, run_dir = run_validation(
-            target_path=target,
-            depth=depth,
-            rubric_name=rubric,
-            config=quorum_config,
-            runs_dir=output_dir or Path("quorum-runs"),
-        )
+        if is_batch:
+            files = resolve_targets(target, pattern)
+            click.echo(
+                f"Batch mode: {len(files)} file(s) "
+                f"({quorum_config.depth_profile} depth, "
+                f"critics: {', '.join(quorum_config.critics)}) ...",
+                err=True,
+            )
+            if relationships:
+                click.echo(f"Phase 2: cross-artifact validation enabled ({relationships})", err=True)
 
-        print_verdict(verdict, run_dir=run_dir, verbose=verbose)
+            batch_verdict, batch_dir = run_batch_validation(
+                target=target,
+                pattern=pattern,
+                depth=depth,
+                rubric_name=rubric,
+                config=quorum_config,
+                runs_dir=output_dir or Path("quorum-runs"),
+                relationships_path=relationships,
+            )
 
-        # Exit with non-zero code if the artifact needs work
-        if verdict.is_actionable:
-            sys.exit(2)  # 2 = validation failed (not a crash)
+            print_batch_verdict(batch_verdict, batch_dir=batch_dir, verbose=verbose)
+
+            if batch_verdict.is_actionable:
+                sys.exit(2)
+        else:
+            click.echo(
+                f"Running Quorum ({quorum_config.depth_profile} depth, "
+                f"critics: {', '.join(quorum_config.critics)}) ...",
+                err=True,
+            )
+            if relationships:
+                click.echo(f"Phase 2: cross-artifact validation enabled ({relationships})", err=True)
+
+            verdict, run_dir = run_validation(
+                target_path=target_path,
+                depth=depth,
+                rubric_name=rubric,
+                config=quorum_config,
+                runs_dir=output_dir or Path("quorum-runs"),
+                relationships_path=relationships,
+            )
+
+            print_verdict(verdict, run_dir=run_dir, verbose=verbose)
+
+            if verdict.is_actionable:
+                sys.exit(2)
 
     except FileNotFoundError as e:
         print_error(str(e))

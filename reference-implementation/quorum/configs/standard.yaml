@@ -1,10 +1,11 @@
 # Standard depth profile — balanced rigor for most work
-# Critics: correctness + completeness (MVP; security + architecture added in future)
+# Critics: correctness + completeness + security (3 critics)
 # Use for: PR reviews, config changes, research submissions
 
 critics:
   - correctness
   - completeness
+  - security
 
 # Model tiers — set to your preferred providers.
 # Tier 1 = strongest model (used for judgment-heavy roles)

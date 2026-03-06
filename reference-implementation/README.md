@@ -44,6 +44,12 @@ quorum run --target examples/sample-agent-config.yaml --rubric agent-config
 
 # Use a specific rubric
 quorum run --target my-research.md --rubric research-synthesis --depth standard
+
+# Batch: validate all markdown files in a directory
+quorum run --target ./docs/ --pattern "*.md" --rubric research-synthesis
+
+# Cross-artifact: validate with a relationships manifest
+quorum run --target my-spec.md --relationships quorum-relationships.yaml
 ```
 
 ---
@@ -71,9 +77,11 @@ Commands:
 
 ```bash
 quorum run \
-  --target <file>                     # required: artifact to validate
+  --target <file-or-dir>              # required: artifact, directory, or glob to validate
   --depth quick|standard|thorough     # depth profile (default: quick)
   --rubric <name-or-path>             # rubric to use (auto-detected if omitted)
+  --pattern "*.md"                    # filter files when --target is a directory
+  --relationships <manifest.yaml>     # cross-artifact manifest for Phase 2 consistency checks
   --output-dir ./my-runs              # where to write outputs (default: ./quorum-runs/)
   --verbose                           # show full evidence for all findings
 ```
@@ -90,8 +98,10 @@ quorum run \
 | Depth | Critics | Use For |
 |-------|---------|---------|
 | `quick` | correctness, completeness | Fast feedback, drafts |
-| `standard` | correctness, completeness | Most work, PR reviews |
-| `thorough` | all critics (same in MVP) | Critical decisions, production changes |
+| `standard` | correctness, completeness, security, code_hygiene | Most work, PR reviews |
+| `thorough` | all 4 shipped critics (more as they land) | Critical decisions, production changes |
+
+All depth profiles include the deterministic **pre-screen** (10 checks, no LLM cost) before any critics run.
 
 Edit `quorum/configs/*.yaml` to customize model assignments and critic panels.
 
@@ -146,29 +156,44 @@ Each `quorum run` creates a timestamped directory:
 ```
 quorum-runs/
 └── 20260223-143022-sample-research/
-    ├── run-manifest.json        # Run parameters
-    ├── artifact.txt             # The artifact (copy)
-    ├── rubric.json              # Rubric used
+    ├── run-manifest.json              # Run parameters, flags, model config
+    ├── artifact.txt                   # The artifact (copy)
+    ├── rubric.json                    # Rubric used
+    ├── prescreen.json                 # Deterministic pre-screen results (PS-001–PS-010)
     ├── critics/
     │   ├── correctness-findings.json
-    │   └── completeness-findings.json
-    ├── verdict.json             # Machine-readable verdict
-    └── report.md                # Human-readable report
+    │   ├── completeness-findings.json
+    │   ├── security-findings.json
+    │   ├── code_hygiene-findings.json
+    │   └── cross_consistency-findings.json  # Phase 2 (if --relationships used)
+    ├── verdict.json                   # Machine-readable verdict
+    └── report.md                      # Human-readable report
 ```
+
+For batch runs, each file gets its own timestamped sub-directory. A top-level `batch-verdict.json` summarizes the full run.
 
 ---
 
 ## Architecture
 
 ```
-quorum run
+quorum run --target file --relationships manifest.yaml
   ↓
 pipeline.py          load config, rubric, artifact
   ↓
-supervisor.py        classify domain, dispatch critics
+prescreen.py         10 deterministic checks (PS-001–PS-010)
+                     → prescreen.json (no LLM, runs instantly)
   ↓
-correctness.py  }
-completeness.py }    each critic → LLM → structured findings
+supervisor.py        Phase 1: classify domain, dispatch critics in parallel
+  ↓
+correctness.py    }
+completeness.py   }  each critic → LLM → structured findings
+security.py       }  (framework-grounded: OWASP ASVS, CWE, NIST SA-11,
+code_hygiene.py   }   ISO 25010:2023, CISQ)
+  ↓
+cross_artifact.py    Phase 2: cross-artifact consistency critic
+                     (only if --relationships provided)
+                     receives Phase 1 findings as context — NOT verdicts
   ↓
 aggregator.py        deduplicate, resolve conflicts, assign verdict
   ↓
@@ -176,6 +201,8 @@ output.py            terminal report + write run directory
 ```
 
 **The core principle:** Every finding must have evidence (a quote, a tool result, a rubric citation). The Aggregator rejects ungrounded claims. This prevents LLM hand-waving.
+
+**Phase 1 vs Phase 2:** Phase 1 critics evaluate each file independently. Phase 2 (Cross-Artifact Consistency) receives Phase 1 *findings* — not verdicts — as context and evaluates declared relationships between files. This keeps phases independent: Phase 2 sees what was found, not a judgment.
 
 ---
 
@@ -202,6 +229,53 @@ Model names follow [LiteLLM conventions](https://docs.litellm.ai/docs/providers)
 
 ---
 
+## Cross-Artifact Validation
+
+When your project has multiple files that should agree with each other — a spec and its implementation, an API contract and its consumers, a config and its schema — use `--relationships` to declare those relationships and let Quorum check them.
+
+### Relationship Manifest
+
+Create `quorum-relationships.yaml`:
+
+```yaml
+version: "1.0"
+relationships:
+  - source: src/api_handler.py
+    target: docs/api-spec.md
+    type: implements
+    description: "Handler must implement all endpoints declared in spec"
+
+  - source: docs/api-spec.md
+    target: src/api_handler.py
+    type: documents
+    description: "Spec must document all public endpoints in handler"
+
+  - source: quorum/critics/security.py
+    target: quorum/configs/standard.yaml
+    type: delegates
+    description: "Security critic is enabled in standard depth profile"
+
+  - source: data/output-schema.json
+    target: src/pipeline.py
+    type: schema_contract
+    description: "Pipeline output must conform to declared schema"
+```
+
+**Relationship types:** `implements`, `documents`, `delegates`, `schema_contract`
+
+### Running with Relationships
+
+```bash
+quorum run \
+  --target ./src/ \
+  --relationships quorum-relationships.yaml \
+  --depth standard
+```
+
+The Cross-Artifact Consistency critic evaluates each declared relationship, looking for mismatches, undocumented behavior, and broken contracts. Findings use a **Locus model** — each finding references both files with role annotations (`source_role`, `target_role`) and a `source_hash` to ensure the finding is pinned to the artifact version that was evaluated.
+
+---
+
 ## Extending Quorum
 
 ### Adding a New Critic
@@ -212,6 +286,12 @@ Model names follow [LiteLLM conventions](https://docs.litellm.ai/docs/providers)
 4. Add the name to your config's `critics` list
 
 See `quorum/critics/correctness.py` for a complete example.
+
+### Adding a Cross-Artifact Critic
+
+The Cross-Artifact Consistency critic does **not** inherit from `BaseCritic` — it uses a separate `CrossArtifactCritic` base class with a different interface, because it operates on pairs/groups of files rather than a single artifact. It also receives Phase 1 findings as additional context via `build_prompt()`.
+
+Supported relationship types for manifest declarations: `implements`, `documents`, `delegates`, `schema_contract`. New types can be added by extending the relationship type registry.
 
 ---
 

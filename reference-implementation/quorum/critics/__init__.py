@@ -4,7 +4,15 @@
 """Critic implementations for Quorum."""
 
 from quorum.critics.base import BaseCritic
-from quorum.critics.correctness import CorrectnessCritic
+from quorum.critics.code_hygiene import CodeHygieneCritic
 from quorum.critics.completeness import CompletenessCritic
+from quorum.critics.correctness import CorrectnessCritic
+from quorum.critics.security import SecurityCritic
 
-__all__ = ["BaseCritic", "CorrectnessCritic", "CompletenessCritic"]
+__all__ = [
+    "BaseCritic",
+    "CodeHygieneCritic",
+    "CompletenessCritic",
+    "CorrectnessCritic",
+    "SecurityCritic",
+]

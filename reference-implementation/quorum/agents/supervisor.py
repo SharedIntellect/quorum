@@ -19,19 +19,24 @@ from typing import Any
 
 from quorum.config import QuorumConfig
 from quorum.critics.base import BaseCritic
+from quorum.critics.code_hygiene import CodeHygieneCritic
 from quorum.critics.completeness import CompletenessCritic
 from quorum.critics.correctness import CorrectnessCritic
-from quorum.models import CriticResult, Rubric
+from quorum.critics.security import SecurityCritic
+from quorum.models import CriticResult, PreScreenResult, Rubric
 from quorum.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
 
-# Map critic names → critic classes
+# Map critic names → critic classes (Phase 1 single-file critics only)
+# cross_consistency is NOT registered here — it runs in Phase 2 via pipeline.py
 CRITIC_REGISTRY: dict[str, type[BaseCritic]] = {
     "correctness": CorrectnessCritic,
     "completeness": CompletenessCritic,
-    # security, architecture, delegation would be added here in future phases
+    "security": SecurityCritic,
+    "code_hygiene": CodeHygieneCritic,
+    # architecture, delegation would be added here in future phases
 }
 
 
@@ -108,24 +113,45 @@ class SupervisorAgent:
         artifact_path: str,
         rubric: Rubric,
         extra_context: dict[str, Any] | None = None,
+        prescreen_result: PreScreenResult | None = None,
     ) -> list[CriticResult]:
         """
         Run all critics against the artifact.
 
         Args:
-            artifact_text: Full text of the artifact
-            artifact_path: File path (used for domain classification)
-            rubric:        Rubric to evaluate against
-            extra_context: Optional context injected into critic prompts
+            artifact_text:    Full text of the artifact
+            artifact_path:    File path (used for domain classification)
+            rubric:           Rubric to evaluate against
+            extra_context:    Optional context injected into critic prompts
+            prescreen_result: Optional pre-screen results to inject as
+                              pre-verified evidence into every critic prompt
 
         Returns:
             List of CriticResult, one per critic that ran successfully
         """
+        # V001 fix: input validation guards
+        if not artifact_text:
+            raise ValueError("artifact_text cannot be empty or None")
+        if rubric is None:
+            raise ValueError("rubric cannot be None")
+
         domain = self.classify_domain(artifact_text, artifact_path)
         logger.info(
-            "Supervisor: artifact='%s' domain='%s' depth='%s' critics=%s",
+            "Supervisor: artifact='%s' domain='%s' depth='%s' critics=%s prescreen=%s",
             artifact_path, domain, self.config.depth_profile, self.config.critics,
+            f"{prescreen_result.failed} failures" if prescreen_result else "disabled",
         )
+
+        # Build extra_context that includes pre-screen evidence block
+        merged_context: dict[str, Any] = dict(extra_context or {})
+        if prescreen_result is not None:
+            evidence_block = prescreen_result.to_evidence_block()
+            merged_context["pre_verified_evidence"] = evidence_block
+            logger.info(
+                "Injecting pre-screen evidence into critic prompts "
+                "(%d checks, %d failed)",
+                prescreen_result.total_checks, prescreen_result.failed,
+            )
 
         critics = self.build_critics()
         results: list[CriticResult] = []
@@ -136,7 +162,7 @@ class SupervisorAgent:
                 result = critic.evaluate(
                     artifact_text=artifact_text,
                     rubric=rubric,
-                    extra_context=extra_context,
+                    extra_context=merged_context if merged_context else None,
                 )
                 results.append(result)
                 logger.info(

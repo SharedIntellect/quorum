@@ -13,7 +13,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ba4c8.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/platform-OpenClaw-2ba4c8" alt="Platform: OpenClaw">
-  <img src="https://img.shields.io/badge/status-working_MVP-2ba4c8" alt="Status: Working MVP">
+  <img src="https://img.shields.io/badge/status-v0.3.0-2ba4c8" alt="Status: v0.3.0">
   <a href="https://clawhub.ai/dacervera/quorum"><img src="https://img.shields.io/badge/ClawHub-dacervera%2Fquorum-2ba4c8" alt="Available on ClawHub"></a>
 </p>
 
@@ -59,6 +59,9 @@ You've got options. You could ask your agent to self-review. You could eyeball i
 | One model reviews its own output | I bring in **separate critics** that never saw the original prompt |
 | "This looks great!" — it wrote it, of course it thinks so | My critics come in cold. **No bias from the creation process** |
 | Vague suggestions you can't act on | **Every finding cites evidence** — an excerpt, a grep result, a schema check |
+| LLM spends tokens on obvious problems | **Pre-screen catches 10 deterministic issues first** — hardcoded creds, PII, syntax errors, before LLM runs |
+| Reviews only one file at a time | **Batch validation** — run across a whole directory, or by `--pattern "*.md"`. One command, one verdict per file |
+| Each file judged in isolation | **Cross-artifact consistency** — I check whether your files actually agree with each other via a relationships manifest |
 | Same effort whether it's a quick sanity check or a full audit | I scale: **quick** ($0.15), **standard** ($0.50), **thorough** ($2.00+) |
 | Each review starts from zero | I'm **designed to learn patterns over time** — storing memories locally. The more I run, the sharper I get |
 
@@ -112,11 +115,11 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
 
 | Depth | Critics | Time | Cost* | When to use it |
 |-------|---------|------|-------|----------------|
-| **Quick** | 2 | 5-10 min | ~$0.15 | "Give me a sanity check before I keep going" |
-| **Standard** | 2-4 | 15-30 min | ~$0.50 | Most work — solid coverage without the wait |
-| **Thorough** | Up to 9 + fix loops | 45-90 min | ~$2.00+ | "This is going to production. It cannot be wrong." |
+| **Quick** | 2 (correctness, completeness) | 5-10 min | ~$0.15 | "Give me a sanity check before I keep going" |
+| **Standard** | 4 (+ security, code_hygiene) | 15-30 min | ~$0.50 | Most work — solid coverage without the wait |
+| **Thorough** | 4 now; more when they ship | 30-60 min | ~$1.50+ | "This is going to production. It cannot be wrong." |
 
-*Estimates on Claude Sonnet. Scales with model and artifact size. Today I ship with 2 critics (Correctness, Completeness). More are coming — the architecture supports all 9 (see [SPEC.md](SPEC.md)).
+*Estimates on Claude Sonnet. Scales with model and artifact size. Pre-screen (10 deterministic checks) runs before LLM critics at every depth level — no extra cost. Today I ship with 4 critics (Correctness, Completeness, Security, Code Hygiene). Architecture, Delegation, and Tester are coming — the full architecture supports all 9 (see [SPEC.md](SPEC.md)).
 
 ---
 
@@ -126,19 +129,31 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
          You: "Validate this"
                    │
           ┌────────┴────────┐
+          │   Pre-Screen    │  10 deterministic checks — runs instant, no LLM
+          └───────┬─────────┘  (credentials, PII, syntax, broken links, TODOs...)
+                  │ prescreen.json
+          ┌───────┴─────────┐
           │   Supervisor    │  I pick the right critics for the job
           └───────┬─────────┘
-                  │ spawns
-   ┌──────────────┼──────────────────┐
-   │    Critics (working independently)    │
-   │  ┌──────┐ ┌──────┐               │
-   │  │Correct│ │Complt│  ← shipped    │
-   │  └──────┘ └──────┘               │
-   │  ┌──────┐ ┌──────┐ ┌────────┐  │
-   │  │Securt│ │ Arch │ │ Tester │  │  ← roadmap
-   │  └──────┘ └──────┘ └────────┘  │
-   └──────────────┬──────────────────┘
-                  │ evidence-grounded findings
+                  │ Phase 1: spawns critics (parallel)
+   ┌──────────────┼──────────────────────────┐
+   │    Critics (working independently)      │
+   │  ┌──────────┐ ┌──────────┐             │
+   │  │Correctness│ │Completns │  ← shipped  │
+   │  └──────────┘ └──────────┘             │
+   │  ┌──────────┐ ┌──────────┐             │
+   │  │ Security │ │CodeHygine│  ← shipped  │
+   │  └──────────┘ └──────────┘             │
+   │  ┌──────┐ ┌──────┐ ┌────────┐         │
+   │  │ Arch │ │Deleg │ │ Tester │ ← roadmap│
+   │  └──────┘ └──────┘ └────────┘         │
+   └──────────────┬───────────────────────────┘
+                  │ Phase 2: (if --relationships provided)
+          ┌───────┴──────────────┐
+          │  Cross-Artifact      │  checks consistency between your files
+          │  Consistency Critic  │  receives Phase 1 findings as context
+          └───────┬──────────────┘
+                  │ evidence-grounded findings (all phases)
           ┌───────┴─────────┐
           │   Aggregator    │  I merge findings, resolve conflicts, remove noise
           └───────┬─────────┘
@@ -160,9 +175,12 @@ Just a model that can reason well. I'll figure out the rest.
 
 | Tier | Models | What to expect |
 |------|--------|---------------|
-| **Recommended** | Claude Opus/Sonnet 4.6+, GPT-5.2+, Gemini 2.0+ | Full capability — I'll do my best work |
-| **Functional** | Claude Haiku 4.5+, GPT-4o | I'll still help, but with less depth |
+| **Recommended** | Claude Opus 4.6+, GPT-5.2+ | Full capability — judgment-heavy work (thorough depth, cross-artifact consistency) benefits substantially from frontier reasoning |
+| **Great** | Claude Sonnet 4.6+, Gemini 2.0+ | Excellent for quick and standard depth — most validation work lives here |
+| **Functional** | Claude Haiku 4.5+, GPT-4o | I'll still help, but with less depth on nuanced findings |
 | **Not enough** | Llama 70B, most open models (early 2026) | I need more reasoning power than these can give me |
+
+**Model routing tip:** For `--depth thorough` or `--relationships` runs, set `model_tier1` to a frontier model (Opus, GPT-5.2) in your config. Quick and standard runs work great with Sonnet-class models on both tiers. See depth configs in `quorum/configs/` for defaults.
 
 I auto-detect your model on first run and configure myself accordingly. Details: [MODEL_REQUIREMENTS.md](docs/MODEL_REQUIREMENTS.md)
 
@@ -172,20 +190,25 @@ I auto-detect your model on first run and configure myself accordingly. Details:
 
 I'm working. I'm real. I'm also still growing.
 
-**What I can do today** (shipped Feb 23, 2026):
-- Full CLI: `quorum run --target <file> --depth quick|standard|thorough`
-- 2 critics (Correctness, Completeness) with evidence grounding
+**What I can do today** (v0.3.0):
+- Full CLI: `quorum run --target <file> [--depth] [--rubric] [--pattern] [--relationships] [--output-dir] [--verbose]`
+- **4 critics** — Correctness, Completeness, Security (OWASP ASVS 5.0, CWE Top 25, NIST SA-11), Code Hygiene (ISO 25010:2023, CISQ) — all with evidence grounding
+- **Deterministic pre-screen** — 10 fast checks (hardcoded paths, credentials, PII, JSON/YAML/Python syntax, broken links, TODOs, whitespace, empty files) before any LLM runs
+- **Batch validation** — `--target ./dir/` or `--pattern "*.md"` to validate many files at once; get a consolidated `BatchVerdict`
+- **Cross-artifact consistency** — `--relationships quorum-relationships.yaml` to declare implements/documents/delegates relationships between files and check them
+- **Custom rubric loading** — `--rubric ./my-rubric.json`
 - 2 built-in rubrics (research-synthesis, agent-config)
 - Auto-configuration on first run
 - LiteLLM universal provider (100+ models)
-- Full audit trail for every run
+- Full audit trail for every run (timestamped run directory with prescreen.json, critic JSONs, verdict.json, report.md)
 - Available on ClawHub: `openclaw skills add dacervera/quorum`
 
 **What's coming:**
-- More critics (Security, Architecture, Delegation)
+- More critics (Architecture, Delegation, Style, Tester)
+- Fix loops — I'll propose fixes, not just findings (wired up, coming soon)
 - PKI/compliance rubric packs (RFC 3647, RFC 5280, CA/B Forum Baselines, WebTrust, ISO 19790, NIST SP 800-57/130/152)
 - Learning memory that sharpens over time
-- Fixer agent — I'll propose fixes, not just findings
+- Confidence calibration
 - Community rubric contributions
 
 ---

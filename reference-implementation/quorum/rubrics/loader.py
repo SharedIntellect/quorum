@@ -96,8 +96,12 @@ class RubricLoader:
         raw_criteria = data.get("criteria", [])
         criteria = []
         for raw in raw_criteria:
-            # Coerce severity string to enum
-            raw_severity = raw.get("severity", "MEDIUM").upper()
+            # Coerce severity string to enum — accept "severity" or "category" field
+            raw_severity = (
+                raw.get("severity")
+                or raw.get("category")
+                or "MEDIUM"
+            ).upper()
             try:
                 severity = Severity(raw_severity)
             except ValueError:
@@ -107,13 +111,25 @@ class RubricLoader:
                 )
                 severity = Severity.MEDIUM
 
+            # Accept multiple field names for evidence and rationale
+            evidence_required = (
+                raw.get("evidence_required")
+                or raw.get("evidence_instruction")
+                or raw.get("evidence_type", "")
+            )
+            why = (
+                raw.get("why")
+                or raw.get("rationale")
+                or ""
+            )
+
             criteria.append(
                 RubricCriterion(
                     id=raw["id"],
                     criterion=raw["criterion"],
                     severity=severity,
-                    evidence_required=raw.get("evidence_required", ""),
-                    why=raw.get("why", ""),
+                    evidence_required=evidence_required,
+                    why=why,
                     category=raw.get("category"),
                 )
             )

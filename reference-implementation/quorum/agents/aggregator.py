@@ -129,15 +129,15 @@ class AggregatorAgent:
                     }
                     if severity_order[candidate.severity] > severity_order[existing.severity]:
                         # Replace with the higher-severity version, preserving source info
-                        merged_source = f"{existing.critic_source},{candidate.critic_source}"
+                        merged_source = f"{existing.critic},{candidate.critic}"
                         kept[i] = candidate.model_copy(
-                            update={"critic_source": merged_source}
+                            update={"critic": merged_source}
                         )
                     else:
                         # Keep existing but note the additional critic source
-                        merged_source = f"{existing.critic_source},{candidate.critic_source}"
+                        merged_source = f"{existing.critic},{candidate.critic}"
                         kept[i] = existing.model_copy(
-                            update={"critic_source": merged_source}
+                            update={"critic": merged_source}
                         )
                     break
 
@@ -171,7 +171,7 @@ class AggregatorAgent:
         agreement_bonus = 0.0
         if len(active_results) > 1 and findings:
             multi_source = sum(
-                1 for f in findings if "," in f.critic_source
+                1 for f in findings if "," in f.critic
             )
             agreement_bonus = min(0.1, 0.02 * multi_source)
 

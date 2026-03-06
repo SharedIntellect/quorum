@@ -1,8 +1,8 @@
 # Quorum — Architectural Specification
 
-**Version:** 2.3 (Production)  
-**Last Updated:** February 2026  
-**Status:** Documented and ready for external implementation  
+**Version:** 3.0 (Production)  
+**Last Updated:** March 2026  
+**Status:** Documented and partially implemented — see §3 for implementation status per component  
 **Platform:** Designed for [OpenClaw](https://openclaw.ai) agent systems. Cross-platform compatibility with other agent frameworks is under active exploration — see [MODEL_REQUIREMENTS.md](docs/MODEL_REQUIREMENTS.md) for supported models and platforms.
 
 ---
@@ -100,72 +100,188 @@ High-frequency patterns automatically promote to mandatory checks in future runs
 
 Three execution profiles balance rigor, speed, and cost:
 
-| Depth | Critics | Fix Loops | Runtime | Use Case |
+| Depth | Critics (v0.3.0) | Fix Loops | Runtime | Use Case |
 |-------|---------|-----------|---------|----------|
-| **quick** | Correctness, Security, Completeness | 0 | 5-10 min | Fast feedback; low stakes |
-| **standard** | + Architecture, Delegation | ≤1 on CRITICAL | 15-30 min | Most work; default |
-| **thorough** | All 9 + external validator | ≤2 on CRITICAL/HIGH | 45-90 min | Critical decisions; production |
+| **quick** | Correctness, Completeness | 0 | 5-10 min | Fast feedback; low stakes |
+| **standard** | + Security, Code Hygiene | 0 (loops planned) | 15-30 min | Most work; default |
+| **thorough** | All shipped critics | 0 (loops planned) | 30-60 min | Critical decisions; production |
+
+Pre-screen (10 deterministic checks, §3.1) runs before LLM critics at all depth levels. Fix loops are configured (capped at 3) but not yet implemented. Full 9-critic panels are the roadmap target for thorough depth.
+
+### 2.6 Transparency Over Convenience
+
+> *"In a judgment system, always trade toward transparency over convenience."*
+
+This is a standing design axiom. When implementation choices arise — such as whether to pass a verdict or raw findings to the next stage, whether to surface intermediate outputs, or whether to collapse multi-locus findings into a summary — Quorum always chooses the option that preserves traceability and exposes reasoning.
+
+Concrete consequences:
+- **Phase 2 receives findings, not verdicts** from Phase 1. The Cross-Artifact critic sees what was discovered, not a collapsed judgment, so it can reason independently.
+- **Pre-screen results are always written** to `prescreen.json`, even when all checks pass.
+- **Run directories are immutable** — outputs are written once and never modified in place.
+- **Aggregator decisions are logged** — every dedup and conflict resolution is recorded, not just the outcome.
 
 ---
 
 ## 3. Architecture
 
-### 3.1 The Nine Agents
+### 3.1 Pre-Screen Layer *(implemented)*
+
+Before any LLM critic runs, Quorum executes 10 fast deterministic checks against the target artifact. These checks are rule-based, produce no API costs, and complete in milliseconds.
+
+| Check ID | What It Catches |
+|----------|----------------|
+| PS-001 | Hardcoded absolute paths (portability risk) |
+| PS-002 | Credential patterns (API keys, tokens, passwords) |
+| PS-003 | PII patterns (email addresses, SSNs, phone numbers) |
+| PS-004 | JSON syntax errors |
+| PS-005 | YAML syntax errors |
+| PS-006 | Python syntax errors |
+| PS-007 | Broken internal links (file references that don't resolve) |
+| PS-008 | TODO/FIXME/HACK markers |
+| PS-009 | Trailing whitespace and mixed line endings |
+| PS-010 | Empty file or effectively-empty file |
+
+Pre-screen results are written to `prescreen.json` in the run directory. If any check has severity `CRITICAL` or `HIGH`, the artifact may be rejected before LLM critics are invoked, depending on depth profile. Pre-screen findings are passed as context to Phase 1 critics.
+
+### 3.2 The Agents: Implemented vs. Specified
 
 ```
 Supervisor (Orchestrator)
-├─ Correctness Critic (Tier 2)      ├─ Architecture Critic (Tier 2)
-├─ Security Critic (Tier 1)         ├─ Delegation Critic (Tier 1)
-├─ Completeness Critic (Tier 2)    ├─ Tester (Tier 2, tools: grep, web, exec)
-├─ Fixer (Tier 1, optional)        ├─ Aggregator (Tier 1)
-└─ Supervisor (Opus, final)
+├─ Correctness Critic (Tier 2)      [IMPLEMENTED]
+├─ Completeness Critic (Tier 2)     [IMPLEMENTED]
+├─ Security Critic (Tier 1)         [IMPLEMENTED] — grounded: OWASP ASVS 5.0, CWE Top 25, NIST SA-11
+├─ Code Hygiene Critic (Tier 2)     [IMPLEMENTED] — grounded: ISO 25010:2023, CISQ
+├─ Cross-Artifact Consistency       [IMPLEMENTED] — Phase 2, separate from BaseCritic
+├─ Architecture Critic (Tier 2)     [SPECIFIED, not yet built]
+├─ Delegation Critic (Tier 1)       [SPECIFIED, not yet built]
+├─ Style Critic (Tier 2)            [SPECIFIED, not yet built]
+├─ Tester (Tier 2, tools: grep/web/exec) [SPECIFIED, not yet built]
+├─ Fixer (Tier 1, optional)         [SPECIFIED, stubbed at 0 loops]
+├─ Aggregator (Tier 1)              [IMPLEMENTED]
+└─ Supervisor (Tier 1, final)       [IMPLEMENTED]
 ```
 
-Model assignments reflect Tomasev delegation: judgment-heavy roles (Correctness, Security, Aggregator, Supervisor) use your strongest model (Tier 1); execution-heavy roles use a capable but cost-efficient model (Tier 2). For example, Tier 1 might be Claude Opus or GPT-4, and Tier 2 might be Claude Sonnet or GPT-4o-mini.
+Model assignments reflect Tomasev delegation: judgment-heavy roles (Security, Aggregator, Supervisor) use your strongest model (Tier 1); execution-heavy roles use a capable but cost-efficient model (Tier 2). For example, Tier 1 might be Claude Opus or GPT-4, and Tier 2 might be Claude Sonnet or GPT-4o-mini.
 
-### 3.2 The Workflow
+### 3.3 Two-Phase Pipeline
 
-1. **Intake** — Supervisor receives the artifact (config, research, code) and target rubric
-2. **Dispatch** — Supervisor provides each critic with:
+```
+quorum run --target file --relationships manifest.yaml
+  │
+  ├─ Pre-Screen (§3.1) → prescreen.json
+  │
+  ├─ Phase 1: Supervisor dispatches single-file critics (parallel)
+  │   ├─ correctness
+  │   ├─ completeness
+  │   ├─ security (framework-grounded)
+  │   └─ code_hygiene (framework-grounded)
+  │
+  ├─ Phase 2: Cross-Artifact Consistency (if --relationships provided)
+  │   └─ Evaluates declared relationships between files
+  │       Receives Phase 1 findings (NOT verdicts) as context
+  │
+  ├─ Aggregator → dedup, resolve conflicts, assign verdict
+  │
+  └─ Output: PASS / PASS_WITH_NOTES / REVISE / REJECT
+```
+
+**Phase coordination contract:** Phase 1 critics produce `Finding` objects with grounded evidence. The Aggregator does not run between phases. Phase 2 receives the raw Phase 1 findings as a serialized list — it can observe what was found, but no intermediate verdict has been assigned. This is required by Design Axiom §2.6: transparency over convenience.
+
+### 3.4 Cross-Artifact Consistency *(Phase 2)*
+
+When `--relationships` is provided, Quorum loads a YAML manifest declaring relationships between files and dispatches the Cross-Artifact Consistency critic.
+
+**Manifest format:**
+```yaml
+version: "1.0"
+relationships:
+  - source: src/api_handler.py
+    target: docs/api-spec.md
+    type: implements
+  - source: docs/api-spec.md
+    target: src/api_handler.py
+    type: documents
+  - source: quorum/critics/security.py
+    target: quorum/configs/standard.yaml
+    type: delegates
+  - source: data/output-schema.json
+    target: src/pipeline.py
+    type: schema_contract
+```
+
+**Relationship types:** `implements` | `documents` | `delegates` | `schema_contract`
+
+**Locus model:** Cross-artifact findings use a `Locus` object with two anchor points:
+
+```json
+{
+  "loci": [
+    {
+      "file": "src/api_handler.py",
+      "role": "source",
+      "excerpt": "def get_user(id): ...",
+      "source_hash": "sha256:abc123"
+    },
+    {
+      "file": "docs/api-spec.md",
+      "role": "target",
+      "excerpt": "GET /users/{id} — returns user object",
+      "source_hash": "sha256:def456"
+    }
+  ],
+  "relationship_type": "implements",
+  "issue": "Handler returns 200 on missing user; spec declares 404",
+  "severity": "HIGH"
+}
+```
+
+`source_hash` pins each finding to the artifact version that was evaluated, enabling reproducibility audits.
+
+**Path safety:** All paths in the manifest are resolved and boundary-checked against the project root. Traversal outside the declared boundary raises an error before evaluation begins.
+
+### 3.5 The Workflow
+
+1. **Intake** — Supervisor receives the artifact (config, research, code), target rubric, and optional relationships manifest
+2. **Pre-Screen** — 10 deterministic checks run (§3.1); results written to `prescreen.json`
+3. **Phase 1 Dispatch** — Supervisor provides each critic with:
    - The artifact excerpt relevant to their domain
    - The rubric criteria they must evaluate
    - Required evidence format
-3. **Parallel Execution** — 9 critics run in parallel:
-   - Correctness checks semantic accuracy
-   - Security searches for vulnerabilities
-   - Completeness scans for gaps
-   - Architecture evaluates design coherence
-   - Delegation assesses span-of-control and contracts
-   - Tester executes concrete checks (schema validation, git queries, etc.)
-   - Fixer proposes fixes for CRITICAL issues (if depth=standard+)
-4. **Aggregation** — Aggregator:
-   - Deduplicates issues across critics
+   - Pre-screen results as context
+4. **Phase 1 Parallel Execution** — Shipped critics run in parallel (see §3.2)
+5. **Phase 2 Dispatch** (if `--relationships`) — Cross-Artifact critic receives:
+   - Both artifacts for each declared relationship
+   - Phase 1 findings (not verdicts) as context
+6. **Aggregation** — Aggregator:
+   - Deduplicates issues across all phases and critics
    - Resolves conflicts (if critics disagree, escalates to Supervisor)
    - Recalibrates confidence scores
-   - Merges fixer suggestions into a coherent recommendation
-5. **Verdict** — Supervisor assigns final verdict:
+7. **Verdict** — Supervisor assigns final verdict:
    - **PASS** — No issues or only LOW-severity findings
    - **PASS_WITH_NOTES** — Issues found, all addressable, recommendations provided
    - **REVISE** — HIGH/CRITICAL issues require rework; Supervisor provides guidance
    - **REJECT** — Unfixable architectural problems; restart required
-6. **Learning** — System extracts and logs new failure patterns for future runs
+8. **Learning** — System extracts and logs new failure patterns *(specified, not yet wired up)*
 
-### 3.3 File-Based Artifact Passing
+### 3.6 File-Based Artifact Passing
 
 All communication between agents uses file-based artifacts, not in-memory variables:
 
 ```
-run-manifest.json          ← Supervisor's execution plan
-artifact.yaml              ← What's being validated
-rubric.json                ← Validation criteria
+run-manifest.json                   ← Supervisor's execution plan
+artifact.yaml                       ← What's being validated
+rubric.json                         ← Validation criteria
+prescreen.json                      ← Deterministic pre-screen results (PS-001–PS-010)
 critics/
 ├── correctness-findings.json
-├── security-findings.json
 ├── completeness-findings.json
-├── ...
-aggregator-synthesis.json  ← Merged findings
-known_issues.json          ← Learning memory (updated)
-verdict.json               ← Final result
+├── security-findings.json
+├── code_hygiene-findings.json
+└── cross_consistency-findings.json  ← Phase 2 (if --relationships used)
+aggregator-synthesis.json           ← Merged findings
+known_issues.json                   ← Learning memory (updated)
+verdict.json                        ← Final result
+report.md                           ← Human-readable summary
 ```
 
 This enforces:
@@ -278,18 +394,24 @@ Additional runs on related artifacts reuse critic prompts and tools, amortizing 
 
 ## 8. Implementation Checklist
 
-To implement Quorum from this spec, you need:
+Status as of v0.3.0 (reference implementation):
 
-- [ ] LLM provider with at least two model tiers (e.g., Claude Opus/Sonnet, GPT-4/GPT-4o-mini, or equivalent)
-- [ ] Tool execution environment (shell, git, web search, schema validation)
-- [ ] File-based artifact passing (no in-memory state between agents)
-- [ ] 9 agent templates (each with unique system prompt per the spec)
-- [ ] Rubric system (JSON schema + validator)
-- [ ] Learning memory system (persistent `known_issues.json` + pattern aggregation)
-- [ ] Aggregator synthesis logic (conflict resolution, confidence recalibration)
-- [ ] Verdict assignment logic (PASS/PASS_WITH_NOTES/REVISE/REJECT + reasoning)
-- [ ] Depth preset system (quick/standard/thorough configurations)
-- [ ] Monitoring/trust system (per-critic accuracy tracking + trust levels)
+- [x] LLM provider — LiteLLM universal provider (100+ models, any tier combination)
+- [x] File-based artifact passing (no in-memory state between agents)
+- [x] Pre-screen layer — 10 deterministic checks (PS-001–PS-010)
+- [x] 4 critics implemented — Correctness, Completeness, Security, Code Hygiene
+- [x] Cross-Artifact Consistency critic (Phase 2, relationships manifest)
+- [x] Rubric system (JSON schema + validator, 2 built-in rubrics)
+- [x] Batch/multi-file validation with `BatchVerdict`
+- [x] Aggregator synthesis logic (conflict resolution)
+- [x] Verdict assignment logic (PASS/PASS_WITH_NOTES/REVISE/REJECT)
+- [x] Depth preset system (quick/standard/thorough YAML configs)
+- [x] Path traversal security (boundary enforcement)
+- [x] Exit codes (0/1/2)
+- [ ] Remaining 5 critics (Architecture, Delegation, Style, Tester, full Fixer)
+- [ ] Fix loops (config exists, implementation at 0)
+- [ ] Learning memory system (Issue model exists, not wired up)
+- [ ] Trust/monitoring system (per-critic accuracy tracking)
 
 See IMPLEMENTATION.md for a reference walkthrough.
 
@@ -311,19 +433,26 @@ Quorum is built on these peer-reviewed papers:
 
 ## 10. Known Limitations & Roadmap
 
-### Current Limitations (v2.3)
+### Current Limitations (v3.0)
 
+- Only **4 of 9 critics are implemented** (Architecture, Delegation, Style, Tester are specified but not built)
+- **Fix loops are stubbed** — config exists (max 3 loops), implementation is at 0
+- **Learning memory is not wired up** — the `Issue` model exists; pattern accumulation is not connected
 - Rubric panel is **static** (doesn't specialize per artifact type dynamically)
 - **No critic-to-critic debate** (relies on Aggregator to resolve conflicts)
 - Learning is **frequency-based** only (no semantic deduplication of patterns yet)
-- Domain classifier is **LLM-based** (adding a deterministic pre-screen in v2.4)
+- **Confidence calibration** is not yet implemented
 
-### Planned for v3.0
+### Planned
 
+- Remaining critics: Architecture, Delegation, Style, Tester
+- Fix loops — Fixer agent proposes concrete patches for CRITICAL/HIGH findings
+- Learning memory — wiring up `known_issues.json` accumulation and mandatory-check promotion
 - Dynamic critic specialization (spawn domain-specific critics on-demand)
 - Critic debate mode (when two critics conflict, run a structured debate)
 - Semantic pattern deduplication (group similar issues under one ML pattern)
 - Empirical confidence calibration (long-term tracking of verdict accuracy)
+- PKI/compliance rubric packs (RFC 3647, RFC 5280, CA/B Forum Baselines, NIST SP 800-57/130/152)
 
 ---
 

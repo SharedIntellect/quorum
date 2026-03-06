@@ -24,6 +24,9 @@ VALID_CRITICS = {
     "delegation",
     "style",
     "tester",
+    "code_hygiene",
+    # cross_consistency is NOT listed here — it's a Phase 2 critic activated
+    # via --relationships flag, not the critics list in config.
 }
 
 VALID_DEPTHS = {"quick", "standard", "thorough"}
@@ -52,6 +55,10 @@ class QuorumConfig(BaseModel):
     api_keys: dict[str, str] = Field(default_factory=dict)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     max_tokens: int = Field(default=4096, ge=256)
+    enable_prescreen: bool = Field(
+        default=True,
+        description="Run deterministic pre-screen checks before LLM critics",
+    )
 
     @field_validator("critics")
     @classmethod
