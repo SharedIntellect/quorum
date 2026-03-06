@@ -14,6 +14,7 @@ The Supervisor:
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -107,6 +108,37 @@ class SupervisorAgent:
 
         return critics
 
+    def _run_one_critic(
+        self,
+        critic: BaseCritic,
+        artifact_text: str,
+        rubric: Rubric,
+        merged_context: dict[str, Any] | None,
+    ) -> CriticResult:
+        """Run a single critic, returning CriticResult (never raises)."""
+        logger.info("Running critic: %s", critic.name)
+        try:
+            result = critic.evaluate(
+                artifact_text=artifact_text,
+                rubric=rubric,
+                extra_context=merged_context if merged_context else None,
+            )
+            logger.info(
+                "Critic %s: %d findings (confidence=%.2f)",
+                critic.name, len(result.findings), result.confidence,
+            )
+            return result
+        except Exception as e:
+            logger.error("Critic %s crashed: %s", critic.name, e)
+            return CriticResult(
+                critic_name=critic.name,
+                findings=[],
+                confidence=0.0,
+                runtime_ms=0,
+                skipped=True,
+                skip_reason=str(e),
+            )
+
     def run(
         self,
         artifact_text: str,
@@ -154,33 +186,18 @@ class SupervisorAgent:
             )
 
         critics = self.build_critics()
-        results: list[CriticResult] = []
+        max_workers = min(len(critics), 4)  # Cap at 4 to avoid API rate limits
 
-        for critic in critics:
-            logger.info("Running critic: %s", critic.name)
-            try:
-                result = critic.evaluate(
-                    artifact_text=artifact_text,
-                    rubric=rubric,
-                    extra_context=merged_context if merged_context else None,
-                )
-                results.append(result)
-                logger.info(
-                    "Critic %s: %d findings (confidence=%.2f)",
-                    critic.name, len(result.findings), result.confidence,
-                )
-            except Exception as e:
-                logger.error("Critic %s crashed: %s", critic.name, e)
-                # Append a skipped result so the Aggregator knows
-                results.append(
-                    CriticResult(
-                        critic_name=critic.name,
-                        findings=[],
-                        confidence=0.0,
-                        runtime_ms=0,
-                        skipped=True,
-                        skip_reason=str(e),
-                    )
-                )
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    self._run_one_critic, critic, artifact_text, rubric, merged_context
+                ): critic
+                for critic in critics
+            }
+            results: list[CriticResult] = []
+            for future in as_completed(futures):
+                results.append(future.result())
 
+        results.sort(key=lambda r: r.critic_name)
         return results

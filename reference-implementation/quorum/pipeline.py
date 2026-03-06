@@ -17,13 +17,14 @@ from __future__ import annotations
 import glob as glob_mod
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
 from quorum.agents.aggregator import AggregatorAgent
 from quorum.agents.supervisor import SupervisorAgent
 from quorum.config import QuorumConfig
-from quorum.models import BatchVerdict, FileResult, Verdict, VerdictStatus
+from quorum.models import BatchVerdict, FileResult, Severity, Verdict, VerdictStatus
 from quorum.providers.litellm_provider import LiteLLMProvider
 from quorum.rubrics.loader import RubricLoader
 
@@ -31,6 +32,10 @@ logger = logging.getLogger(__name__)
 
 # Output directory for all quorum runs
 DEFAULT_RUNS_DIR = Path("quorum-runs")
+
+# Max concurrent file validations in batch mode
+# Keep conservative to avoid API rate limits
+MAX_BATCH_WORKERS = 3
 
 
 def run_validation(
@@ -124,6 +129,27 @@ def run_validation(
             result.model_dump(),
         )
 
+    # Phase 1.5: Fix proposals (if enabled and blocking findings exist)
+    fix_report = None
+    if config.max_fix_loops > 0:
+        blocking = [f for cr in critic_results for f in cr.findings
+                    if f.severity in (Severity.CRITICAL, Severity.HIGH)]
+        if blocking:
+            from quorum.agents.fixer import FixerAgent
+            fixer = FixerAgent(provider=provider, config=config)
+            fix_report = fixer.run(
+                findings=blocking,
+                artifact_text=artifact_text,
+                artifact_path=str(target),
+            )
+            _write_json(run_dir / "fix-proposals.json", fix_report.model_dump())
+            logger.info(
+                "Fixer: %d proposals for %d findings (%d skipped)",
+                len(fix_report.proposals),
+                fix_report.findings_addressed,
+                fix_report.findings_skipped,
+            )
+
     # Phase 2: cross-artifact consistency (runs only when --relationships is provided)
     if relationships_path is not None:
         try:
@@ -180,7 +206,7 @@ def run_validation(
 
     # Save outputs
     _write_json(run_dir / "verdict.json", verdict.model_dump())
-    _write_report(run_dir / "report.md", verdict, target, rubric, config)
+    _write_report(run_dir / "report.md", verdict, target, rubric, config, fix_report=fix_report)
 
     # Update manifest with prescreen stats now that we have them
     prescreen_stats: dict = {"prescreen_enabled": config.enable_prescreen}
@@ -238,6 +264,12 @@ def _select_rubric(
     # Auto-detect from file extension / content
     ext = target.suffix.lower()
     text_lower = artifact_text.lower()
+
+    if ext == ".py":
+        try:
+            return loader.load("python-code")
+        except FileNotFoundError:
+            pass
 
     if ext in (".yaml", ".yml", ".json"):
         # Likely a config file
@@ -417,6 +449,37 @@ def resolve_targets(
     raise FileNotFoundError(f"Target not found: {target}")
 
 
+def _validate_one_file(
+    file_path: Path,
+    index: int,
+    total: int,
+    depth: str,
+    rubric_name: str | None,
+    config: "QuorumConfig | None",
+    runs_dir: Path,
+    relationships_path: "Path | None",
+) -> "FileResult | dict":
+    """Validate a single file, returning FileResult or error dict."""
+    logger.info("Validating file %d/%d: %s", index, total, file_path)
+    try:
+        verdict, run_dir = run_validation(
+            target_path=file_path,
+            depth=depth,
+            rubric_name=rubric_name,
+            config=config,
+            runs_dir=runs_dir,
+            relationships_path=relationships_path,
+        )
+        return FileResult(
+            file_path=str(file_path),
+            verdict=verdict,
+            run_dir=str(run_dir),
+        )
+    except Exception as e:
+        logger.error("Failed to validate %s: %s", file_path, e)
+        return {"file": str(file_path), "error": str(e)}
+
+
 def run_batch_validation(
     target: str | Path,
     pattern: str | None = None,
@@ -487,25 +550,23 @@ def run_batch_validation(
     errors: list[dict] = []
     batch_started = datetime.now(timezone.utc).isoformat()
 
-    for i, file_path in enumerate(files, 1):
-        logger.info("Validating file %d/%d: %s", i, len(files), file_path)
-        try:
-            verdict, run_dir = run_validation(
-                target_path=file_path,
-                depth=depth,
-                rubric_name=rubric_name,
-                config=config,
-                runs_dir=batch_dir / "per-file",
-                relationships_path=relationships_path,
-            )
-            file_results.append(FileResult(
-                file_path=str(file_path),
-                verdict=verdict,
-                run_dir=str(run_dir),
-            ))
-        except Exception as e:
-            logger.error("Failed to validate %s: %s", file_path, e)
-            errors.append({"file": str(file_path), "error": str(e)})
+    max_workers = min(len(files), MAX_BATCH_WORKERS)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                _validate_one_file,
+                file_path, i, len(files),
+                depth, rubric_name, config,
+                batch_dir / "per-file", relationships_path,
+            ): file_path
+            for i, file_path in enumerate(files, 1)
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            if isinstance(result, FileResult):
+                file_results.append(result)
+            else:
+                errors.append(result)
 
     # Compute aggregate verdict
     batch_verdict = _aggregate_batch(file_results, errors)
@@ -680,9 +741,9 @@ def _write_report(
     target: Path,
     rubric,
     config: QuorumConfig,
+    fix_report=None,
 ) -> None:
     """Write a Markdown validation report."""
-    from quorum.models import Severity
 
     report = verdict.report
     display_target = target.name if target.is_absolute() else target
@@ -741,6 +802,39 @@ def _write_report(
         lines.append("")
         lines.append("No issues found.")
         lines.append("")
+
+    if fix_report and fix_report.proposals:
+        n = len(fix_report.proposals)
+        m = fix_report.findings_addressed + fix_report.findings_skipped
+        lines += [
+            "---",
+            "",
+            "## Fix Proposals",
+            "",
+            f"The Fixer proposed {n} change{'s' if n != 1 else ''} for {m} CRITICAL/HIGH finding{'s' if m != 1 else ''}:",
+            "",
+        ]
+        for i, proposal in enumerate(fix_report.proposals, 1):
+            confidence_pct = int(proposal.confidence * 100)
+            lines += [
+                f"### {i}. Fix for: {proposal.finding_description[:100]}",
+                f"**Confidence:** {confidence_pct}%  ",
+                f"**Explanation:** {proposal.explanation}",
+                "",
+                "```diff",
+                f"- {proposal.original_text}",
+                f"+ {proposal.replacement_text}",
+                "```",
+                "",
+            ]
+        if fix_report.skip_reasons:
+            lines += [
+                f"**Skipped ({fix_report.findings_skipped}):**",
+                "",
+            ]
+            for reason in fix_report.skip_reasons:
+                lines.append(f"- {reason}")
+            lines.append("")
 
     if report:
         lines += [

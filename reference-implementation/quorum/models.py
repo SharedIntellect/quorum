@@ -276,6 +276,28 @@ class PreScreenResult(BaseModel):
         return "\n".join(lines)
 
 
+class FixProposal(BaseModel):
+    """A proposed fix for a specific finding."""
+    finding_id: str = Field(description="ID of the finding this fixes")
+    finding_description: str = Field(description="Brief description of the finding")
+    file_path: str = Field(description="Path to the file to modify")
+    original_text: str = Field(description="Exact text to find and replace")
+    replacement_text: str = Field(description="Text to replace it with")
+    explanation: str = Field(description="Why this change fixes the issue")
+    confidence: float = Field(ge=0.0, le=1.0, description="Fixer's confidence this is correct")
+
+
+class FixReport(BaseModel):
+    """Results from the Fixer agent."""
+    proposals: list[FixProposal] = Field(default_factory=list)
+    findings_addressed: int = 0
+    findings_skipped: int = 0
+    skip_reasons: list[str] = Field(default_factory=list)
+    loop_number: int = 1
+    revalidation_verdict: Optional[str] = Field(default=None, description="Verdict after applying fixes, if re-validation ran")
+    revalidation_delta: Optional[str] = Field(default=None, description="Summary of what changed after fix")
+
+
 class Issue(BaseModel):
     """
     Persistent failure pattern stored in the learning memory (known_issues.json).

@@ -85,6 +85,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [ ] Confidence calibration (Milestone #6b)
 - [ ] Learning memory (Milestone #7)
 - [ ] Fix loops (Milestone #5b)
+- [x] Parallel critic execution (Milestone #8) ← **DONE**
+- [x] Parallel batch validation (Milestone #8b) ← **DONE**
+- [x] Python code rubric — 25 criteria, auto-detect on .py ← **DONE**
+- [x] Fix loops / Fixer agent (Milestone #5b) ← **DONE** (proposals; re-validation loops future)
+- [ ] Python rubric framework grounding — research swarm for PEP 8/257/484, Python antipatterns literature, map criteria to published sources with citations (same rigor as SEC/hygiene frameworks)
+- [ ] Architecture critic (Milestone #9)
+- [ ] Tester critic (Milestone #10)
+- [ ] Confidence calibration (Milestone #6b)
+- [ ] Learning memory (Milestone #7)
+- [ ] Delegation critic (Milestone #11)
+- [ ] Style critic (Milestone #12)
 - [ ] Documentation headers adoption (Phase 1–4)
 - [ ] Self-validation graduation (GRAD)
 
