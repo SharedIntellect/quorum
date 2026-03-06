@@ -36,7 +36,7 @@ When I'm done, you get a clear answer.
 ```
 You:     "Run a quorum check on my-research-report.md"
 
-Me:      Spawning critics (correctness, completeness, security, architecture)...
+Me:      Spawning critics (correctness, completeness, security, code_hygiene)...
          Evaluating against research-quality rubric...
 
          Verdict: PASS_WITH_NOTES
@@ -63,7 +63,7 @@ You've got options. You could ask your agent to self-review. You could eyeball i
 | Reviews only one file at a time | **Batch validation** — run across a whole directory, or by `--pattern "*.md"`. One command, one verdict per file |
 | Each file judged in isolation | **Cross-artifact consistency** — I check whether your files actually agree with each other via a relationships manifest |
 | Same effort whether it's a quick sanity check or a full audit | I scale: **quick** ($0.15), **standard** ($0.50), **thorough** ($2.00+) |
-| Each review starts from zero | I'm **designed to learn patterns over time** — storing memories locally. The more I run, the sharper I get |
+| Each review starts from zero | I'm **designed to learn patterns over time** — storing memories locally *(planned, not yet active)* |
 
 Single agent, multi-agent swarm, hundred-step pipeline — doesn't matter how it was built. If it produced an output, I can tell you whether it holds up.
 

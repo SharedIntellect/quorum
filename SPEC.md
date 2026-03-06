@@ -1,6 +1,6 @@
 # Quorum — Architectural Specification
 
-**Version:** 3.0 (Production)  
+**Version:** 3.0  
 **Last Updated:** March 2026  
 **Status:** Documented and partially implemented — see §3 for implementation status per component  
 **Platform:** Designed for [OpenClaw](https://openclaw.ai) agent systems. Cross-platform compatibility with other agent frameworks is under active exploration — see [MODEL_REQUIREMENTS.md](docs/MODEL_REQUIREMENTS.md) for supported models and platforms.
@@ -382,7 +382,7 @@ This follows Tomasev's "trust as runtime primitive" principle.
 | Component | Cost | Amortization |
 |-----------|------|--------------|
 | Per-run setup (Supervisor intake) | $0.02 | 1 run |
-| 9 critics (parallel, max 30min) | $0.15-0.45 | 1 run |
+| 4 shipped critics (parallel, max 30min; 9 at full build-out) | $0.15-0.45 | 1 run |
 | Aggregator synthesis | $0.01 | 1 run |
 | Tester tools (grep, git, web, exec) | $0.00 | amortized |
 | Learning update (`known_issues.json`) | $0.00 | amortized |
@@ -464,7 +464,7 @@ Quorum is built on these peer-reviewed papers:
 1. Read [IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for a reference walkthrough
 2. Review [examples/](examples/) for your use case
 3. Adapt rubrics from [reference-rubrics/](reference-rubrics/) or build custom
-4. Run the tutorial: `validator run --example basic`
+4. Run the tutorial: `quorum run --target examples/sample-research.md --depth quick`
 
 ---
 
