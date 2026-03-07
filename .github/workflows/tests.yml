@@ -1,0 +1,104 @@
+name: Tests & Coverage
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          cd reference-implementation
+          pip install --upgrade pip
+          pip install -e .
+          pip install -r requirements-test.txt
+
+      - name: Run unit & integration tests (no API)
+        run: |
+          cd reference-implementation
+          pytest tests/ -v \
+            --ignore=tests/test_e2e_smoke.py \
+            --ignore=tests/test_performance.py \
+            -x
+
+      - name: Generate coverage report
+        run: |
+          cd reference-implementation
+          coverage run --source=quorum -m pytest tests/ \
+            --ignore=tests/test_e2e_smoke.py \
+            --ignore=tests/test_performance.py
+          coverage report -m
+          coverage xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./reference-implementation/coverage.xml
+          flags: unittests
+          fail_ci_if_error: false
+
+  smoke-test:
+    name: Smoke Test (Real LLM)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          cd reference-implementation
+          pip install -e .
+          pip install -r requirements-test.txt
+
+      - name: Run smoke tests (with real Haiku)
+        run: |
+          cd reference-implementation
+          pytest tests/test_e2e_smoke.py -v
+
+  performance:
+    name: Performance Baseline
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          cd reference-implementation
+          pip install -e .
+          pip install -r requirements-test.txt
+
+      - name: Run performance benchmarks
+        run: |
+          cd reference-implementation
+          pytest tests/test_performance.py -v
