@@ -455,7 +455,7 @@ Quorum is built on these peer-reviewed papers:
 - Critic debate mode (when two critics conflict, run a structured debate)
 - Semantic pattern deduplication (group similar issues under one ML pattern)
 - Empirical confidence calibration (long-term tracking of verdict accuracy)
-- PKI/compliance rubric packs (RFC 3647, RFC 5280, CA/B Forum Baselines, NIST SP 800-57/130/152)
+- Domain-specific rubric packs (compliance, security, infrastructure)
 
 ---
 
@@ -463,7 +463,7 @@ Quorum is built on these peer-reviewed papers:
 
 1. Read [IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for a reference walkthrough
 2. Review [examples/](examples/) for your use case
-3. Adapt rubrics from [reference-rubrics/](reference-rubrics/) or build custom
+3. Adapt built-in rubrics or build custom ones (see [RUBRIC_BUILDING_GUIDE.md](docs/RUBRIC_BUILDING_GUIDE.md))
 4. Run the tutorial: `quorum run --target examples/sample-research.md --depth quick`
 
 ---

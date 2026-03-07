@@ -137,7 +137,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **File path rubrics** — `--rubric ./path/to/my-rubric.json` now loads custom rubric files directly
 - **Schema flexibility** — rubric loader accepts field aliases: `category`→`severity`, `evidence_instruction`→`evidence_required`, `rationale`→`why`
 - **Backwards compatible** — built-in rubric names still work as before
-- **Unblocks:** PKI rubric flywheel strategy (RFC 3647, CA/B Baselines, etc.)
+- **Unblocks:** domain-specific rubric development workflows
 
 #### Milestone #2: Multi-File / Batch Validation
 - **Directory targets** — `quorum run --target ./docs/` validates all text files in a directory

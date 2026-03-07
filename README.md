@@ -79,7 +79,7 @@ Validation is the beginning, not the end. The deeper question — the one that m
 
 Not "it looks right." Not "the agent said so." Traced, cited, documented proof.
 
-That's where rubrics come in. A rubric isn't just a checklist. It's a machine-readable encoding of a standard — RFC 3647, NIST SP 800-57, CA/B Forum Baselines — that turns vague compliance questions into testable, evidence-grounded verdicts. I run those rubrics. Critics evaluate evidence against criteria. You get a finding with a citation, not a feeling.
+That's where rubrics come in. A rubric isn't just a checklist. It's a machine-readable encoding of a standard — OWASP ASVS, SOC 2 controls, your internal style guide — that turns vague compliance questions into testable, evidence-grounded verdicts. I run those rubrics. Critics evaluate evidence against criteria. You get a finding with a citation, not a feeling.
 
 This is what I'm growing into: not just agent output validation, but a **substantiation framework** for anything a standard can express.
 
@@ -214,7 +214,7 @@ I'm working. I'm real. I'm also still growing.
 **What's coming:**
 - More critics (Architecture, Delegation, Style, Tester)
 - Re-validation loops (apply fixes → re-run critics → verify)
-- PKI/compliance rubric packs (RFC 3647, RFC 5280, CA/B Forum Baselines, WebTrust, ISO 19790, NIST SP 800-57/130/152)
+- Domain-specific rubric packs (compliance, security, infrastructure)
 - Learning memory that sharpens over time
 - Confidence calibration
 - Community rubric contributions
@@ -230,18 +230,11 @@ Rubrics are what make me domain-useful. I'm building a library:
 - `agent-config` — evaluates agent configuration files
 - `python-code` — evaluates Python source files (25 criteria, PC-001–PC-025; auto-detected on `.py` files)
 
-**In development — PKI/compliance:**
-- NIST SP 800-57 (Key Management Recommendations) — *rubric drafted*
-- NIST SP 800-130 (CKMS Framework) — *rubric drafted*
-- NIST SP 800-152 (Profile for CKMS) — *rubric drafted, B+ validated*
-- RFC 3647 (Certificate Policy / CPS Framework) — *in progress*
-- RFC 5280 (X.509 PKI Certificate/CRL Profile) — *planned*
-- CA/Browser Forum Baseline Requirements — *planned*
-- WebTrust Criteria — *planned*
-- ISO 19790 (Security Requirements for Cryptographic Modules) — *planned*
-- ITU-T X.509 — *planned*
+**Build your own:**
 
-Want to build a rubric for your domain? → [RUBRIC_BUILDING_GUIDE.md](docs/RUBRIC_BUILDING_GUIDE.md)
+Quorum rubrics are JSON files — any standard you can express as testable criteria, Quorum can evaluate. Compliance frameworks, internal style guides, regulatory requirements, API contracts.
+
+→ [RUBRIC_BUILDING_GUIDE.md](docs/RUBRIC_BUILDING_GUIDE.md)
 
 ---
 

@@ -66,7 +66,7 @@ Run Quorum against your own system and share the results. See `docs/EXTERNAL_REV
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold this standard.
+This project follows the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/). By participating, you agree to uphold this standard.
 
 ## Questions?
 

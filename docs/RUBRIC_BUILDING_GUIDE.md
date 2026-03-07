@@ -10,7 +10,7 @@ A rubric is a machine-readable encoding of what "good" looks like. It's not a va
 
 The distinction that matters: a rubric turns a compliance question from *"does this seem right?"* into *"can you prove it meets criterion X from standard Y?"* That's substantiation. It's the difference between a vibe check and a defensible finding.
 
-Building a rubric is fundamentally a knowledge-encoding problem. You take a standard — a published specification, an RFC, an NIST document — and systematically extract its requirements into a form Quorum's critics can evaluate. This guide walks through that process, using PKI publications as worked examples throughout.
+Building a rubric is fundamentally a knowledge-encoding problem. You take a standard — a published specification, an industry framework, a regulatory requirement — and systematically extract its requirements into a form Quorum's critics can evaluate. This guide walks through that process, using OWASP ASVS (Application Security Verification Standard) as worked examples throughout.
 
 **The payoff is compounding.** A good rubric runs indefinitely. You build it once; every subsequent evaluation is essentially free expertise.
 
@@ -37,26 +37,27 @@ Getting the standard into clean markdown is the foundation. Everything downstrea
 |-----------|------|-------|
 | Clean, text-based PDF | **PyMuPDF** (`fitz`) | Fast, accurate, preserves structure |
 | Scanned or OCR-heavy PDF | **Marker** | Higher quality output, slower |
-| Already HTML | Direct fetch | IETF RFCs, many NIST docs |
+| Already HTML | Direct fetch | OWASP docs, IETF RFCs, many NIST publications |
 | DOCX/XLSX | **python-docx** / **openpyxl** | Straightforward |
 
 ### Examples
 
-**For RFCs (RFC 3647, RFC 5280):** Fetch directly from IETF — clean plaintext or HTML available at `https://www.rfc-editor.org/rfc/rfcNNNN.txt`. No PDF processing needed.
+**For OWASP ASVS:** Available as markdown directly from GitHub — no PDF processing needed:
 
 ```bash
-curl https://www.rfc-editor.org/rfc/rfc3647.txt -o rfc3647.txt
+git clone https://github.com/OWASP/ASVS.git
+# Requirements are in structured markdown tables under each chapter
 ```
 
-**For NIST SPs:** PDFs from `csrc.nist.gov`. Most have embedded text — PyMuPDF works:
+**For NIST publications:** PDFs from `csrc.nist.gov`. Most have embedded text — PyMuPDF works:
 
 ```python
 import fitz  # PyMuPDF
-doc = fitz.open("sp800-57pt1r5.pdf")
+doc = fitz.open("sp800-53r5.pdf")
 text = "\n".join(page.get_text() for page in doc)
 ```
 
-**For CA/B Forum Baselines:** Available as PDF from `cabforum.org`. Text-based — PyMuPDF works. Watch for frequent version updates; pin the version in your rubric metadata.
+**For IETF RFCs:** Fetch directly — clean plaintext or HTML available at `https://www.rfc-editor.org/rfc/rfcNNNN.txt`.
 
 **For ISO standards:** Purchase required. If you have access, export to PDF and process with PyMuPDF or Marker.
 
@@ -94,25 +95,30 @@ Category mapping is deterministic from normative strength. This isn't a judgment
 
 For each normative statement you find:
 
-1. **Record the section reference** — e.g., `RFC3647 §4.2.1`
+1. **Record the section reference** — e.g., `ASVS V2.1.1`
 2. **Extract the full statement** — verbatim, not paraphrased
-3. **Identify the subject** — what entity does this apply to? (CA, subscriber, RA, relying party, etc.)
-4. **Tag normative strength** — SHALL/SHOULD/MAY
-5. **Flag compound statements** — "The CA SHALL do X AND Y AND Z" → three separate criteria
+3. **Identify the subject** — what entity does this apply to? (application, API, service, developer, etc.)
+4. **Tag normative strength** — SHALL/SHOULD/MAY (or ASVS levels: L1/L2/L3)
+5. **Flag compound statements** — "The application SHALL do X AND Y AND Z" → three separate criteria
 
 Compound requirements are the most common mistake. A single sentence can contain multiple independent testable assertions. Decompose them. Assessment against a compound assertion is ambiguous; assessment against three atomic assertions is precise.
 
-### RFC 3647 Note
+### OWASP ASVS Note
 
-RFC 3647's structure is unusually well-suited to decomposition. The CP/CPS framework is organized into 9 major sections (1-9) with standardized subsections — certificate issuance, revocation, operational security, etc. Each subsection maps cleanly to a policy component. This means section references carry semantic weight: if you're looking for subscriber obligations, you know where to look.
+ASVS uses a three-level verification model (L1/L2/L3) rather than RFC 2119 normative language. Map levels to severity:
+- **L1** (Opportunistic) → `HIGH` — minimum baseline, every application should meet these
+- **L2** (Standard) → `CRITICAL` — standard applications handling sensitive data
+- **L3** (Advanced) → `CRITICAL` — high-value applications (medical, military, critical infrastructure)
+
+Each requirement also has a unique ID (e.g., V2.1.1) with structured chapters, making decomposition straightforward.
 
 ### Output Format
 
 Produce a working document (markdown table or spreadsheet) with columns:
 
-| Section | Statement (verbatim) | Subject | Normative Strength | Notes |
-|---------|---------------------|---------|-------------------|-------|
-| RFC3647 §4.2.1 | The CA SHALL verify the identity of... | CA | SHALL | Compound — split into 3a, 3b, 3c |
+| Section | Statement (verbatim) | Subject | Level | Notes |
+|---------|---------------------|---------|-------|-------|
+| V2.1.1 | Verify that user set passwords are at least 12 characters in length | Application | L1 | Compound — also implies password field accepts 12+ chars |
 
 Don't try to generate rubric JSON yet. This intermediate format lets you review and refine before committing to structure.
 
@@ -124,36 +130,36 @@ This is where the rubric comes alive — and where domain expertise is irreplace
 
 Each normative statement from Step 2 becomes a rubric criterion. A criterion has:
 
-- **`id`** — unique identifier, e.g., `rfc3647.4.2.1.a`
+- **`id`** — unique identifier, e.g., `asvs.v2.1.1`
 - **`category`** — severity tier: `CRITICAL` / `HIGH` / `MEDIUM` / `LOW` (from Step 2 mapping)
 - **`criterion`** — the testable claim (what must be true)
 - **`evidence_type`** — how to gather evidence: `tool` (grep, file read), `web_search`, `manual`
 - **`evidence_instruction`** — specific directions for what the critic should look for and how
 - **`rationale`** — *why* this criterion matters; what risk does a failure represent?
 
-The **evidence instruction** is where expertise earns its keep. "The CA SHALL verify subscriber identity" is the normative statement. But what does verification look like in evidence? Does a ceremony record suffice? A signed attestation? An audit log entry? A configuration file showing the verification step? Someone who doesn't know PKI operations will write vague guidance. Someone who does knows exactly what to look for.
+The **evidence instruction** is where expertise earns its keep. "The application SHALL enforce minimum password length" is the normative statement. But what does enforcement look like in evidence? Is a frontend validation sufficient? Does it need server-side enforcement too? What about API endpoints — do they share the same validation? Someone who doesn't understand application security will write vague guidance. Someone who does knows to check both client and server, and to look for password policy configuration rather than trusting UI-only checks.
 
-### Example: RFC 3647 §4.2.1
+### Example: ASVS V2.1 — Password Security
 
-Normative statement: *"The CA SHALL verify the identity of all subscribers before issuing certificates."*
+Normative statement: *"Verify that user set passwords are at least 12 characters in length (after combining spaces)."* (V2.1.1, L1)
 
 ```json
 {
-  "id": "rfc3647.4.2.1",
-  "category": "CRITICAL",
-  "criterion": "The CA verifies subscriber identity prior to certificate issuance using documented procedures.",
+  "id": "asvs.v2.1.1",
+  "category": "HIGH",
+  "criterion": "The application enforces a minimum password length of 12 characters for user-set passwords.",
   "evidence_type": "tool",
-  "evidence_instruction": "Search the CP/CPS for identity verification procedures (typically §3.2 or equivalent). Check for: (1) a documented verification procedure specific enough to be auditable — 'we verify identity' is insufficient; 'government-issued photo ID verified in-person or via video call per [procedure ref]' is sufficient, (2) evidence the procedure distinguishes between certificate types if the CA issues multiple, (3) RA delegation documentation if verification is outsourced.",
-  "rationale": "Identity verification is the foundation of certificate trust. A CA that issues certificates without verified identity undermines the entire PKI trust chain. Unverified subscribers enable impersonation and man-in-the-middle attacks."
+  "evidence_instruction": "Search the codebase for password validation logic — look for length checks in authentication modules, user registration handlers, and password change flows. Check for: (1) server-side validation (client-side only is insufficient), (2) the minimum is at least 12 characters (not 8 — ASVS updated from NIST SP 800-63B), (3) spaces are allowed and counted toward length, (4) configuration-driven thresholds are set to ≥12. Check password policy configuration files if validation is externalized (e.g., identity provider settings).",
+  "rationale": "Short passwords are trivially brute-forced. The 12-character minimum aligns with NIST SP 800-63B and provides meaningful resistance against offline attacks. Allowing spaces encourages passphrases, which are both more secure and more memorable."
 }
 ```
 
 ### Practical Notes
 
-- **Start with SHALL statements.** CRITICAL criteria define the floor. Get those right first.
+- **Start with L1 requirements.** These define the minimum floor. Get those right first.
 - **Evidence instruction is the hard part.** Budget most of your domain expertise time here.
-- **Evidence instructions should be concrete.** "Check documentation" is too vague. "Search CP/CPS §3.2 for identity verification procedure" is better. "Grep for RA ceremony records showing dual-control authorization" is best.
-- **Avoid circular criteria.** "The CA shall comply with the CA/B Forum requirements" isn't testable — it's a reference to another standard. Decompose the actual requirement.
+- **Evidence instructions should be concrete.** "Check for password validation" is too vague. "Search authentication modules for length checks" is better. "Grep for password policy configuration showing minimum_length ≥ 12" is best.
+- **Avoid circular criteria.** "The application shall comply with OWASP guidelines" isn't testable — it's a reference to itself. Decompose the actual requirement.
 
 ---
 
@@ -163,27 +169,28 @@ Concordance mapping cross-references terms and requirements across related stand
 
 ### What It Adds
 
-Single-standard rubrics answer: *"Does this meet RFC 3647?"*
+Single-standard rubrics answer: *"Does this meet OWASP ASVS V2?"*
 
-Multi-standard concordance answers: *"This requirement in RFC 3647 maps to this requirement in CA/B Baselines, which is addressed differently in WebTrust — here's the gap."*
+Multi-standard concordance answers: *"This requirement in ASVS V2 maps to this control in NIST SP 800-53, which is assessed differently in SOC 2 — here's the gap."*
 
 That's a qualitatively different output. It surfaces alignment, gaps, and conflicts across the standards landscape automatically.
 
 ### Process
 
-1. **Identify related standards.** For PKI: RFC 3647 ↔ CA/B Forum Baselines ↔ WebTrust ↔ RFC 5280 ↔ ETSI EN 319 411.
-2. **Extract vocabulary.** Key terms from each standard. "Subscriber," "Subject," "End Entity" may refer to the same concept across standards — or subtly different ones.
+1. **Identify related standards.** For application security: OWASP ASVS ↔ NIST SP 800-53 ↔ SOC 2 ↔ ISO 27001 ↔ PCI DSS.
+2. **Extract vocabulary.** Key terms from each standard. "Authentication," "identity verification," "credential management" may refer to the same concept across standards — or subtly different ones.
 3. **Map requirements to requirements.** Which criterion in Standard A corresponds to which in Standard B? One-to-one, one-to-many, or gap (no counterpart)?
 4. **Document the mapping.** Add `concordance` metadata to each criterion:
 
 ```json
 {
-  "id": "rfc3647.4.2.1",
+  "id": "asvs.v2.1.1",
   "concordance": {
-    "cab_baselines": "BR §3.2.2",
-    "webtrust": "Principle 1, Criterion 1.2.4",
+    "nist_sp800_53": "IA-5(1)(h)",
+    "soc2": "CC6.1",
+    "pci_dss": "Req 8.3.6",
     "alignment": "aligned",
-    "notes": "CA/B is more specific about acceptable verification methods; RFC 3647 is framework-level"
+    "notes": "NIST 800-53 defers to 800-63B for specifics; PCI DSS 4.0 now requires 12 chars, aligning with ASVS"
   }
 }
 ```
@@ -202,16 +209,16 @@ Structure your criteria as a Quorum rubric configuration.
 
 ```json
 {
-  "id": "rfc3647-v1.0",
-  "name": "RFC 3647 — Certificate Policy / CPS Framework",
+  "id": "owasp-asvs-v2-auth",
+  "name": "OWASP ASVS V2 — Authentication",
   "version": "1.0.0",
   "source": {
-    "standard": "RFC 3647",
-    "title": "Internet X.509 Public Key Infrastructure Certificate Policy and Certification Practices Framework",
-    "url": "https://www.rfc-editor.org/rfc/rfc3647",
-    "pinned_version": "2003-11"
+    "standard": "OWASP ASVS 4.0.3",
+    "title": "Application Security Verification Standard — Chapter V2: Authentication",
+    "url": "https://github.com/OWASP/ASVS",
+    "pinned_version": "4.0.3"
   },
-  "scope": "Evaluates certificate policies and CPS documents against RFC 3647 framework requirements.",
+  "scope": "Evaluates application authentication implementations against OWASP ASVS V2 requirements.",
   "critics": ["correctness", "completeness"],
   "grading": {
     "pass_threshold": 0.85,
@@ -220,14 +227,13 @@ Structure your criteria as a Quorum rubric configuration.
   },
   "criteria": [
     {
-      "id": "rfc3647.4.2.1",
-      "category": "CRITICAL",
-      "criterion": "The CA verifies subscriber identity prior to certificate issuance using documented procedures.",
+      "id": "asvs.v2.1.1",
+      "category": "HIGH",
+      "criterion": "The application enforces a minimum password length of 12 characters for user-set passwords.",
       "evidence_type": "tool",
-      "evidence_instruction": "Search CP/CPS for identity verification procedures...",
-      "rationale": "Identity verification is the foundation of certificate trust..."
+      "evidence_instruction": "Search authentication modules for password length validation...",
+      "rationale": "Short passwords are trivially brute-forced..."
     }
-    // ... more criteria
   ]
 }
 ```
@@ -247,74 +253,68 @@ Structure your criteria as a Quorum rubric configuration.
 
 ---
 
-## 8. Worked Example: RFC 3647 §4.2 — Certificate Application Processing
+## 8. Worked Example: OWASP ASVS V2.1 — Password Security Requirements
 
-This walks through all five steps for a concrete slice of RFC 3647.
+This walks through all five steps for a concrete slice of OWASP ASVS.
 
 ### Source Text (Step 1)
 
-From `https://www.rfc-editor.org/rfc/rfc3647.txt`, section 4.2:
+From OWASP ASVS 4.0.3, Chapter V2.1 — Password Security:
 
-> **4.2. Certificate Application Processing**
->
-> This section describes procedures for processing certificate applications, including:
->
-> 4.2.1. Performing identification and authentication functions
->
-> CPs or CPSs may describe how the CA or RA performs identification and authentication for certificate applications, including:
->
-> - Verification of identity claims
-> - Validation of supporting documentation
-> - The means by which authentication of individuals is performed
+> | # | Description | L1 | L2 | L3 |
+> |---|-------------|----|----|-----|
+> | V2.1.1 | Verify that user set passwords are at least 12 characters in length (after combining spaces). | ✓ | ✓ | ✓ |
+> | V2.1.2 | Verify that passwords of at least 64 characters are permitted, and that passwords of more than 128 characters are denied. | ✓ | ✓ | ✓ |
+> | V2.1.3 | Verify that password truncation is not performed. | ✓ | ✓ | ✓ |
 
 ### Normative Decomposition (Step 2)
 
-RFC 3647 is a framework document — it describes what a CP/CPS *should address*, not always in SHALL terms. The normative force here is about the CP/CPS being complete and explicit on these points.
+ASVS uses "Verify that..." as its normative form — each row is a single testable requirement. The L1/L2/L3 columns indicate which verification level requires it.
 
-| Section | Statement | Subject | Strength | Notes |
-|---------|-----------|---------|----------|-------|
-| 4.2.1 | CP/CPS SHALL address how identity claims are verified | CA/RA | SHALL | Framework completeness requirement |
-| 4.2.1 | CP/CPS SHALL address how supporting documentation is validated | CA/RA | SHALL | Framework completeness requirement |
-| 4.2.1 | CP/CPS SHALL describe authentication method for individuals | CA/RA | SHALL | Framework completeness requirement |
+| Section | Statement | Subject | Level | Notes |
+|---------|-----------|---------|-------|-------|
+| V2.1.1 | Passwords at least 12 chars in length | Application | L1 | Includes space combining |
+| V2.1.2 | Passwords up to 64 chars permitted; over 128 denied | Application | L1 | Both min-max requirements in one |
+| V2.1.3 | Password truncation not performed | Application | L1 | Prohibition — test differently than positive req |
 
 ### Criteria Generation (Step 3)
 
 ```json
 [
   {
-    "id": "rfc3647.4.2.1.a",
-    "category": "CRITICAL",
-    "criterion": "The CP/CPS explicitly describes the procedure for verifying identity claims in certificate applications.",
+    "id": "asvs.v2.1.1",
+    "category": "HIGH",
+    "criterion": "The application enforces a minimum password length of 12 characters for user-set passwords.",
     "evidence_type": "tool",
-    "evidence_instruction": "Search the CP/CPS for identity verification subsections (typically §3.2 or equivalent). The description must be specific enough to be auditable — 'we verify identity' is insufficient; 'government-issued photo ID verified in-person or via video call per [procedure ref]' is sufficient. Check that the procedure distinguishes between certificate types if the CA issues multiple. If RA-delegated, look for RA agreement specifying verification responsibilities.",
-    "rationale": "Without a documented, auditable identity verification procedure, there is no basis for trusting that certificates were issued to verified subscribers. This is a foundational CP/CPS requirement."
+    "evidence_instruction": "Search for password validation logic in authentication modules, registration handlers, and password change endpoints. Verify: (1) server-side enforcement exists (not just client-side JavaScript), (2) minimum threshold is ≥12, (3) spaces are permitted and counted toward length. Check configuration files (e.g., password policy YAML/JSON, identity provider settings) for configurable thresholds.",
+    "rationale": "Short passwords are trivially brute-forced. 12-character minimum per NIST SP 800-63B provides meaningful offline attack resistance."
   },
   {
-    "id": "rfc3647.4.2.1.b",
-    "category": "CRITICAL",
-    "criterion": "The CP/CPS explicitly describes what supporting documentation is required and how it is validated.",
+    "id": "asvs.v2.1.2",
+    "category": "HIGH",
+    "criterion": "The application permits passwords of at least 64 characters and rejects passwords exceeding 128 characters.",
     "evidence_type": "tool",
-    "evidence_instruction": "Look for an enumeration of acceptable document types (government ID, organizational attestation, domain control verification methods, etc.) and the validation procedure for each. Vague language ('appropriate documentation') does not satisfy this criterion. Check for document retention requirements.",
-    "rationale": "Without specified documentation requirements, verification procedures are unauditable and inconsistent across issuance events."
+    "evidence_instruction": "Check password validation for maximum length handling. Look for: (1) no maximum below 64 characters, (2) an explicit maximum at or below 128 (prevents DoS via bcrypt's 72-byte limit or similar). Check database schema — VARCHAR(50) on a password column would violate this. Check if the hashing algorithm has input limits (bcrypt truncates at 72 bytes — a pre-hash step is needed for longer passwords).",
+    "rationale": "Low maximums prevent passphrases. No maximum risks denial-of-service via expensive hashing of enormous inputs. The 64-128 range balances usability with safety."
   },
   {
-    "id": "rfc3647.4.2.1.c",
-    "category": "CRITICAL",
-    "criterion": "The CP/CPS explicitly describes the authentication method(s) used for individual subscribers.",
+    "id": "asvs.v2.1.3",
+    "category": "HIGH",
+    "criterion": "The application does not silently truncate passwords during storage or comparison.",
     "evidence_type": "tool",
-    "evidence_instruction": "The description must cover the authentication mechanism (in-person, video, notarized, vouching) and who performs it (CA directly, accredited RA, trusted third party). Check that the method is appropriate for the certificate assurance level claimed. If multiple certificate types: method must be specified per type.",
-    "rationale": "Authentication method determines the assurance level of the issued certificate. Undocumented methods cannot be audited or compared against claimed assurance levels."
+    "evidence_instruction": "Trace the password from input to hash storage. Check for: (1) no substring/slice operations on the password before hashing, (2) no database column length constraints that would silently truncate (e.g., VARCHAR(20) storing a 30-char password), (3) bcrypt usage — if the password exceeds 72 bytes, verify a pre-hashing step (SHA-256 then bcrypt) rather than silent truncation.",
+    "rationale": "Silent truncation means users think their password is 'correct horse battery staple' but only 'correct horse b' is actually verified. This dramatically reduces effective entropy without the user's knowledge."
   }
 ]
 ```
 
 ### Packaging (Step 5)
 
-These three criteria go into a rubric file targeting PKI policy documents (CPS, CP). The critic configuration:
-- `correctness` — are the documented procedures actually sound?
-- `completeness` — does the document cover all §4.2.1 requirements?
+These three criteria go into a rubric file targeting web application codebases. The critic configuration:
+- `correctness` — is the password handling implementation actually sound?
+- `completeness` — does the codebase address all V2.1 requirements?
 
-The output: a running Quorum evaluation of any CP/CPS against RFC 3647 §4.2, with cited evidence gaps and actionable findings.
+The output: a running Quorum evaluation of any application's authentication code against OWASP ASVS V2.1, with cited evidence gaps and actionable findings.
 
 ---
 
@@ -339,15 +339,15 @@ These assume focused work, good source quality, and pre-existing domain expertis
 
 ## 10. Tips
 
-**Scope discipline is the most important thing.** Pick one section of one standard and do it well. A complete rubric for RFC 3647 §4.2 beats a sketchy rubric for all of RFC 3647. You can always extend.
+**Scope discipline is the most important thing.** Pick one section of one standard and do it well. A complete rubric for OWASP ASVS V2 beats a sketchy rubric for the entire ASVS. You can always extend.
 
-**Start with the highest-ROI standards.** "ROI" means: how often will this rubric run, and what's the cost of a missed finding? For PKI: CA/B Baselines are high-frequency (every audit) and high-stakes (public trust). NIST SP 800-57 is relevant to anyone operating a CKMS. RFC 3647 is essential for any CA writing or reviewing a CPS.
+**Start with the highest-ROI standards.** "ROI" means: how often will this rubric run, and what's the cost of a missed finding? OWASP ASVS is high-frequency (every sprint) and high-stakes (security vulnerabilities). SOC 2 is relevant to any SaaS vendor. NIST SP 800-53 matters for any federal system.
 
 **Dogfood immediately.** Run your rubric against a document you already understand — ideally one with known issues. If the rubric catches the issues you know about, it's working. If it misses them, your assessment guidance needs refinement.
 
 **Evidence instructions are more important than criteria.** A critic with a clear criterion but vague evidence instruction will produce findings you can't verify. A critic with specific evidence instructions forces the evaluation to be concrete.
 
-**Version your rubrics.** Standards update. CA/B Baselines version frequently. When a standard changes, your rubric needs a version bump with a changelog. Build this expectation in from the start.
+**Version your rubrics.** Standards update. OWASP ASVS versions roughly annually. When a standard changes, your rubric needs a version bump with a changelog. Build this expectation in from the start.
 
 **Build concordance incrementally.** Don't try to map everything at once. When you build your second rubric in a domain, map it to your first. Concordance grows naturally if you make it a habit.
 
