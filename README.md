@@ -169,7 +169,7 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
 
 You tell me what "good" looks like by giving me a rubric — a JSON file with your evaluation criteria. I ship with three built-in rubrics (research-synthesis, agent-config, python-code). Need one for your domain? → [RUBRIC_BUILDING_GUIDE.md](docs/RUBRIC_BUILDING_GUIDE.md) walks you through the process step by step.
 
-The research I'm built on: [Reflexion](https://arxiv.org/abs/2303.11366), [Council as Judge](https://arxiv.org/abs/2310.00077), Intelligent Delegation (Tomasev et al., 2026), [LATM](https://arxiv.org/abs/2305.17126). Full architecture: [SPEC.md](SPEC.md).
+The research I'm built on: [Reflexion](https://arxiv.org/abs/2303.11366), [Replacing Judges with Juries](https://arxiv.org/abs/2404.18796), Intelligent Delegation (Tomasev et al., 2026), [LATM](https://arxiv.org/abs/2305.17126). Full architecture: [SPEC.md](SPEC.md).
 
 ---
 

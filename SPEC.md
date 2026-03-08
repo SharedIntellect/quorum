@@ -23,7 +23,7 @@ Quorum treats validation as infrastructure, not an afterthought.
 
 ## 2. Design Principles
 
-### 2.1 Multi-Critic Architecture (Reflexion + Council as Judge)
+### 2.1 Multi-Critic Architecture (Reflexion + Replacing Judges with Juries)
 
 A single model reviewing a long prompt generates:
 - Single point of failure (one model's blindspots)
@@ -427,7 +427,7 @@ Quorum is built on these peer-reviewed papers:
 | Paper | Contribution |
 |-------|--------------|
 | Shinn et al. (2023), Reflexion | Iterative self-critique, learning from failures |
-| Vilar et al. (2023), Council as Judge | Multi-critic consensus, conflict resolution |
+| Verga et al. (2024), Replacing Judges with Juries | Multi-critic consensus, conflict resolution |
 | Cai et al. (2024), LATM | Tool-making paradigm, deterministic execution |
 | Wölflein et al. (2025), ToolMaker | Closed-loop tool generation, autonomous debugging |
 | Tomasev et al. (2026), Intelligent AI Delegation | Bidirectional contracts, monitoring profiles, trust primitives |
