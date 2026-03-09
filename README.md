@@ -189,20 +189,22 @@ I auto-detect your model on first run and configure myself accordingly. Details:
 I'm working. I'm real. I'm also still growing.
 
 **What I can do today** (v0.5.3):
-- Full CLI: `quorum run --target <file> [--depth] [--rubric] [--pattern] [--relationships] [--output-dir] [--verbose] [--fix-loops N] [--no-learning]`
+- Full CLI: `quorum run --target <file> [--depth] [--rubric] [--pattern] [--relationships] [--output-dir] [--verbose] [--fix-loops N] [--no-learning] [--max-cost USD] [--audit-report] [--resume <batch-dir>] [--yes]`
 - **4 critics** — Correctness, Completeness, Security (OWASP ASVS 5.0, CWE Top 25, NIST SA-11; see [SEC-02 workflow](docs/SEC02_BUSINESS_LOGIC_VALIDATION.md) for business logic validation guidance), Code Hygiene (ISO 25010:2023, CISQ) — all with evidence grounding
 - **Parallel execution** — critics run concurrently (ThreadPoolExecutor, max 4); batch files run concurrently (max 3)
 - **Re-validation loops** — Fixer proposes text replacements for CRITICAL/HIGH findings → applies them → re-runs only the critics that flagged the originals → reports improved/unchanged/regressed. Up to 3 loops, stops early when findings clear. `--fix-loops N` or `--depth thorough` (default 1 loop)
 - **Learning memory** — tracks recurring failure patterns across runs in `known_issues.json`. High-frequency patterns auto-promote to mandatory checks injected into critic prompts. `quorum issues list|promote|reset` CLI. Disable with `--no-learning`
 - **Multi-layer pre-screen** — 10 built-in deterministic checks + **DevSkim SAST** + **Ruff S-rules** (Python security) + **Bandit** (Python security, deduplicated with Ruff) + **PSScriptAnalyzer** (PowerShell security) — all run before any LLM, all gracefully degrade if not installed
-- **Batch validation** — `--target ./dir/` or `--pattern "*.md"` to validate many files at once; get a consolidated `BatchVerdict`
+- **Crash-resilient batch validation** — `--target ./dir/` or `--pattern "*.md"` with progressive manifest saves after each file. Graceful SIGTERM/SIGINT shutdown preserves all work. `--resume <batch-dir>` picks up where a crashed or interrupted run left off — only pay for remaining files
 - **Cross-artifact consistency** — `--relationships quorum-relationships.yaml` to declare implements/documents/delegates/`threat_context` relationships between files and check them (`threat_context` type supports authorization boundary review per SEC-04)
 - **Structured output resilience** — critic JSON responses strip markdown fences before parsing; reduces parse failures on model outputs that wrap JSON in code blocks
 - **Custom rubric loading** — `--rubric ./my-rubric.json`
 - 3 built-in rubrics (research-synthesis, agent-config, python-code — auto-detected on `.py` files)
 - Auto-configuration on first run
 - LiteLLM universal provider (100+ models)
-- Full audit trail for every run (timestamped run directory with prescreen.json, critic JSONs, verdict.json, fix-proposals-loop-N.json, report.md)
+- **Cost tracking** — per-call token counts and cost via LiteLLM. Pre-run cost estimates with confirm prompt. `--max-cost $10` budget cap stops gracefully and saves work. Per-file cost breakdown in CLI output and run manifest
+- **CSV audit reports** — `--audit-report` (auto-enabled at `--depth thorough`). Produces `audit-detail.csv` (per-file: SHA-256, timing, tokens, models, cost) and `audit-summary.csv` (aggregates: duration, tokens/sec, cost by model, pass/fail)
+- Full audit trail for every run (timestamped run directory with prescreen.json, critic JSONs, verdict.json, fix-proposals-loop-N.json, report.md, audit CSVs)
 - Available on PyPI: `pip install quorum-validator` | ClawHub: `openclaw skills add dacervera/quorum`
 
 **What's coming:**
