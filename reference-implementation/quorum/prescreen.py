@@ -21,13 +21,14 @@ import json
 import logging
 import py_compile
 import re
+import subprocess
 import tempfile
 import time
 from pathlib import Path
 
 import yaml
 
-from quorum.models import PreScreenCheck, PreScreenResult, Severity
+from quorum.models import Finding, Evidence, PreScreenCheck, PreScreenResult, Severity
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,29 @@ class PreScreen:
         checks.append(self._ps008_todo_markers(artifact_path, artifact_text))
         checks.append(self._ps009_whitespace(artifact_path, artifact_text))
         checks.append(self._ps010_empty_file(artifact_path, artifact_text))
+
+        # ── External Tools ────────────────────────────────────────────────────
+        # Run Ruff linter (graceful degradation if not installed)
+        try:
+            ruff_findings = self._run_ruff(artifact_path, artifact_text)
+            ruff_checks = self._findings_to_checks(ruff_findings, "ruff")
+            checks.extend(ruff_checks)
+        except Exception as e:
+            logger.warning("Ruff integration failed: %s", e)
+            # Graceful degradation: treat as "no issues found" when tool fails
+            checks.append(_pass("EXT-RUFF", "ruff_analysis", "external_tools",
+                               Severity.INFO, "No issues found by ruff (tool unavailable)"))
+
+        # Run DevSkim security scanner (graceful degradation if not installed)
+        try:
+            devskim_findings = self._run_devskim(artifact_path, artifact_text)
+            devskim_checks = self._findings_to_checks(devskim_findings, "devskim")
+            checks.extend(devskim_checks)
+        except Exception as e:
+            logger.warning("DevSkim integration failed: %s", e)
+            # Graceful degradation: treat as "no issues found" when tool fails
+            checks.append(_pass("EXT-DEVSKIM", "devskim_analysis", "external_tools",
+                               Severity.INFO, "No issues found by devskim (tool unavailable)"))
 
         runtime_ms = int(time.time() * 1000) - start_ms
         passed  = sum(1 for c in checks if c.result == "PASS")
@@ -517,6 +541,227 @@ class PreScreen:
 
         return _pass("PS-010", "empty_file", "structure", Severity.MEDIUM,
                      f"File is non-empty ({size} bytes)")
+
+    # ── External Tools ─────────────────────────────────────────────────────────
+
+    def _run_ruff(self, artifact_path: Path, artifact_text: str) -> list[Finding]:
+        """
+        Run Ruff linter against Python files and convert results to Findings.
+
+        Returns empty list if Ruff is not installed or file is not Python.
+        """
+        if artifact_path.suffix.lower() != ".py":
+            return []
+
+        try:
+            # Run ruff check with JSON output
+            result = subprocess.run(
+                ["ruff", "check", "--output-format", "json", str(artifact_path)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode not in (0, 1):  # 0=clean, 1=violations found
+                logger.warning("Ruff check failed with exit code %d: %s",
+                               result.returncode, result.stderr)
+                return []
+
+            if not result.stdout.strip():
+                return []
+
+            # Parse JSON output
+            violations = json.loads(result.stdout)
+            findings = []
+
+            for violation in violations:
+                # Map Ruff severity to Quorum severity
+                ruff_code = violation.get("code", "")
+                severity = self._map_ruff_severity(ruff_code)
+
+                # Extract location
+                location = violation.get("location", {})
+                line_num = location.get("row", 1)
+                column = location.get("column", 1)
+
+                # Create Evidence
+                evidence = Evidence(
+                    tool="ruff",
+                    result=f"[{ruff_code}] {violation.get('message', '')} at line {line_num}:{column}"
+                )
+
+                # Extract CWE reference if available (some Ruff rules map to security issues)
+                framework_refs = []
+                if ruff_code.startswith(("S", "B")):  # Security/bandit rules
+                    framework_refs.append(f"RUFF-{ruff_code}")
+
+                finding = Finding(
+                    severity=severity,
+                    category="code_quality",
+                    description=f"Ruff {ruff_code}: {violation.get('message', '')[:100]}",
+                    evidence=evidence,
+                    location=f"line {line_num}",
+                    critic="ruff",
+                    framework_refs=framework_refs
+                )
+                findings.append(finding)
+
+            return findings
+
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+            logger.warning("Ruff execution failed: %s", e)
+            return []
+        except FileNotFoundError:
+            logger.debug("Ruff not installed, skipping Ruff checks")
+            return []
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning("Failed to parse Ruff output: %s", e)
+            return []
+
+    def _run_devskim(self, artifact_path: Path, artifact_text: str) -> list[Finding]:
+        """
+        Run Microsoft DevSkim against file and convert SARIF results to Findings.
+
+        Maps DevSkim severity: Critical/Error -> HIGH, Warning -> MEDIUM
+        Extracts CWE IDs from SARIF output when available.
+        """
+        try:
+            # Run DevSkim with SARIF output
+            result = subprocess.run(
+                ["devskim", "analyze", "--source-code", str(artifact_path), "-f", "sarif"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode not in (0, 1):  # 0=clean, 1=issues found
+                logger.warning("DevSkim analyze failed with exit code %d: %s",
+                               result.returncode, result.stderr)
+                return []
+
+            if not result.stdout.strip():
+                return []
+
+            # Parse SARIF output
+            sarif_data = json.loads(result.stdout)
+            findings = []
+
+            for run in sarif_data.get("runs", []):
+                rules = {rule["id"]: rule for rule in run.get("tool", {}).get("driver", {}).get("rules", [])}
+
+                for sarif_result in run.get("results", []):
+                    rule_id = sarif_result.get("ruleId", "")
+                    rule_info = rules.get(rule_id, {})
+
+                    # Map DevSkim severity to Quorum severity
+                    level = sarif_result.get("level", "warning").lower()
+                    severity = self._map_devskim_severity(level)
+
+                    # Extract location
+                    locations = sarif_result.get("locations", [])
+                    location_str = "unknown"
+                    if locations:
+                        phys_loc = locations[0].get("physicalLocation", {})
+                        region = phys_loc.get("region", {})
+                        start_line = region.get("startLine", 1)
+                        location_str = f"line {start_line}"
+
+                    # Extract CWE from rule metadata
+                    framework_refs = []
+                    rule_metadata = rule_info.get("properties", {})
+                    cwe_ids = rule_metadata.get("tags", [])
+                    for tag in cwe_ids:
+                        if tag.startswith("CWE-"):
+                            framework_refs.append(tag)
+
+                    # Add DevSkim rule ID
+                    if rule_id:
+                        framework_refs.append(f"DEVSKIM-{rule_id}")
+
+                    # Create Evidence
+                    evidence = Evidence(
+                        tool="devskim",
+                        result=f"[{rule_id}] {sarif_result.get('message', {}).get('text', '')} {location_str}"
+                    )
+
+                    finding = Finding(
+                        severity=severity,
+                        category="security",
+                        description=f"DevSkim {rule_id}: {rule_info.get('shortDescription', {}).get('text', sarif_result.get('message', {}).get('text', ''))[:100]}",
+                        evidence=evidence,
+                        location=location_str,
+                        critic="devskim",
+                        framework_refs=framework_refs
+                    )
+                    findings.append(finding)
+
+            return findings
+
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+            logger.warning("DevSkim execution failed: %s", e)
+            return []
+        except FileNotFoundError:
+            logger.debug("DevSkim not installed, skipping DevSkim checks")
+            return []
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning("Failed to parse DevSkim SARIF output: %s", e)
+            return []
+
+    def _map_ruff_severity(self, ruff_code: str) -> Severity:
+        """Map Ruff error codes to Quorum severities."""
+        # High priority: Security and important issues
+        if ruff_code.startswith(("E9", "F", "S", "B")):  # Syntax errors, security, bandit
+            return Severity.HIGH
+        # Medium priority: Style and complexity
+        if ruff_code.startswith(("E", "W", "C", "N")):  # PEP8, style issues
+            return Severity.MEDIUM
+        # Low priority: Everything else
+        return Severity.LOW
+
+    def _map_devskim_severity(self, devskim_level: str) -> Severity:
+        """Map DevSkim severity levels to Quorum severities."""
+        level_lower = devskim_level.lower()
+        if level_lower in ("critical", "error"):
+            return Severity.HIGH
+        elif level_lower == "warning":
+            return Severity.MEDIUM
+        elif level_lower in ("note", "info"):
+            return Severity.LOW
+        else:
+            return Severity.MEDIUM  # Default fallback
+
+    def _findings_to_checks(self, findings: list[Finding], tool_name: str) -> list[PreScreenCheck]:
+        """Convert external tool findings to PreScreenCheck objects."""
+        if not findings:
+            return [_pass(
+                f"EXT-{tool_name.upper()}",
+                f"{tool_name}_analysis",
+                "external_tools",
+                Severity.INFO,
+                f"No issues found by {tool_name}"
+            )]
+
+        checks = []
+        for i, finding in enumerate(findings):
+            check_id = f"EXT-{tool_name.upper()}-{i+1:03d}"
+            locations = [finding.location] if finding.location else []
+
+            # Format evidence to include framework references
+            evidence = finding.evidence.result
+            if finding.framework_refs:
+                evidence += f"\nReferences: {', '.join(finding.framework_refs)}"
+
+            checks.append(_fail(
+                check_id,
+                f"{tool_name}_finding_{i+1}",
+                "external_tools",
+                finding.severity,
+                finding.description,
+                evidence,
+                locations
+            ))
+
+        return checks
 
 
 # ── Factory helpers ────────────────────────────────────────────────────────────

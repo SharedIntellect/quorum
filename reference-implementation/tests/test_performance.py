@@ -31,7 +31,7 @@ class TestPrescreenPerformance:
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         assert elapsed_ms < 500  # generous for CI, spec says <100ms
-        assert result.total_checks == 10
+        assert result.total_checks == 12  # 10 built-in + 2 external tools (Ruff, DevSkim)
 
     @pytest.mark.slow
     def test_prescreen_large_file_under_2s(self, ps, tmp_path):

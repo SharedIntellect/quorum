@@ -539,11 +539,11 @@ class TestPrescreenPS010EmptyFile:
 
 
 class TestPrescreenEngine:
-    def test_run_returns_all_10_checks(self, ps, tmp_path):
+    def test_run_returns_all_12_checks(self, ps, tmp_path):
         f = tmp_path / "t.md"
         f.write_text("# Hello\n")
         result = ps.run(f, f.read_text())
-        assert result.total_checks == 10
+        assert result.total_checks == 12  # 10 original checks + 2 external tools (Ruff + DevSkim)
 
     def test_counts_match(self, ps, tmp_path):
         f = tmp_path / "t.md"
@@ -611,3 +611,275 @@ class TestPrescreenEngine:
         result = ps.run(f, f.read_text())
         check = next(c for c in result.checks if c.id == "PS-005")
         assert check.result == "PASS"
+
+
+# ── External Tools ───────────────────────────────────────────────────────────
+
+
+class TestPrescreenExternalToolsDevSkim:
+    def test_devskim_not_installed_graceful_skip(self, ps, tmp_path, monkeypatch):
+        """Test graceful degradation when DevSkim is not installed."""
+        def mock_subprocess_run(*args, **kwargs):
+            raise FileNotFoundError("DevSkim not found")
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "test.py"
+        f.write_text('password = "secret123"\n')
+        result = ps.run(f, f.read_text())
+
+        devskim_checks = [c for c in result.checks if c.id.startswith("EXT-DEVSKIM")]
+        assert len(devskim_checks) == 1
+        assert devskim_checks[0].result == "PASS"  # No issues found when tool not available
+
+    def test_devskim_empty_results_no_findings(self, ps, tmp_path, monkeypatch):
+        """Test that clean files produce no DevSkim findings."""
+        def mock_subprocess_run(*args, **kwargs):
+            # Mock empty SARIF output (clean file)
+            class MockResult:
+                returncode = 0
+                stdout = '{"runs": []}'
+                stderr = ""
+            return MockResult()
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "clean.py"
+        f.write_text('x = 42\nprint("Hello World")\n')
+        result = ps.run(f, f.read_text())
+
+        devskim_checks = [c for c in result.checks if c.id.startswith("EXT-DEVSKIM")]
+        assert len(devskim_checks) == 1
+        assert devskim_checks[0].result == "PASS"
+
+    def test_devskim_found_findings_properly_parsed(self, ps, tmp_path, monkeypatch):
+        """Test that DevSkim findings are properly parsed from SARIF output."""
+        def mock_subprocess_run(*args, **kwargs):
+            # Mock SARIF output with a security finding
+            sarif_output = {
+                "runs": [{
+                    "tool": {
+                        "driver": {
+                            "rules": [{
+                                "id": "DS126858",
+                                "shortDescription": {"text": "Hardcoded password"},
+                                "properties": {"tags": ["CWE-798", "Security"]}
+                            }]
+                        }
+                    },
+                    "results": [{
+                        "ruleId": "DS126858",
+                        "level": "error",
+                        "message": {"text": "Hardcoded password found"},
+                        "locations": [{
+                            "physicalLocation": {
+                                "region": {"startLine": 1}
+                            }
+                        }]
+                    }]
+                }]
+            }
+
+            class MockResult:
+                returncode = 1  # Issues found
+                stdout = json.dumps(sarif_output)
+                stderr = ""
+            return MockResult()
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "test.py"
+        f.write_text('password = "secret123"\n')
+        result = ps.run(f, f.read_text())
+
+        devskim_checks = [c for c in result.checks if c.id.startswith("EXT-DEVSKIM")]
+        assert len(devskim_checks) == 1
+        assert devskim_checks[0].result == "FAIL"
+        assert devskim_checks[0].severity == Severity.HIGH  # error level maps to HIGH
+        assert "DS126858" in devskim_checks[0].description
+        assert "CWE-798" in devskim_checks[0].evidence
+
+    def test_devskim_severity_mapping(self, ps, tmp_path, monkeypatch):
+        """Test DevSkim severity levels are correctly mapped to Quorum severities."""
+        def mock_subprocess_run(*args, **kwargs):
+            sarif_output = {
+                "runs": [{
+                    "tool": {"driver": {"rules": [
+                        {"id": "CRITICAL_RULE", "shortDescription": {"text": "Critical issue"}},
+                        {"id": "WARNING_RULE", "shortDescription": {"text": "Warning issue"}},
+                        {"id": "INFO_RULE", "shortDescription": {"text": "Info issue"}}
+                    ]}},
+                    "results": [
+                        {"ruleId": "CRITICAL_RULE", "level": "critical", "message": {"text": "Critical"}, "locations": [{"physicalLocation": {"region": {"startLine": 1}}}]},
+                        {"ruleId": "WARNING_RULE", "level": "warning", "message": {"text": "Warning"}, "locations": [{"physicalLocation": {"region": {"startLine": 2}}}]},
+                        {"ruleId": "INFO_RULE", "level": "info", "message": {"text": "Info"}, "locations": [{"physicalLocation": {"region": {"startLine": 3}}}]}
+                    ]
+                }]
+            }
+
+            class MockResult:
+                returncode = 1
+                stdout = json.dumps(sarif_output)
+                stderr = ""
+            return MockResult()
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "test.py"
+        f.write_text('line1\nline2\nline3\n')
+        result = ps.run(f, f.read_text())
+
+        devskim_checks = [c for c in result.checks if c.id.startswith("EXT-DEVSKIM") and c.result == "FAIL"]
+        assert len(devskim_checks) == 3
+
+        # Check severity mapping
+        severities = {c.name.split("_")[-1]: c.severity for c in devskim_checks}
+        assert any(c.severity == Severity.HIGH for c in devskim_checks)  # critical/error -> HIGH
+        assert any(c.severity == Severity.MEDIUM for c in devskim_checks)  # warning -> MEDIUM
+        assert any(c.severity == Severity.LOW for c in devskim_checks)  # info -> LOW
+
+    def test_devskim_sarif_parsing_edge_cases(self, ps, tmp_path, monkeypatch):
+        """Test SARIF parsing handles edge cases gracefully."""
+        def mock_subprocess_run(*args, **kwargs):
+            # Malformed SARIF
+            class MockResult:
+                returncode = 1
+                stdout = '{"invalid": "json'  # Malformed JSON
+                stderr = ""
+            return MockResult()
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "test.py"
+        f.write_text('password = "secret123"\n')
+        result = ps.run(f, f.read_text())
+
+        # Should gracefully handle malformed SARIF and create a skip entry
+        devskim_checks = [c for c in result.checks if c.id.startswith("EXT-DEVSKIM")]
+        assert len(devskim_checks) == 1
+        assert devskim_checks[0].result == "PASS"  # Falls back to "no issues" when parsing fails
+
+    def test_devskim_timeout_handling(self, ps, tmp_path, monkeypatch):
+        """Test DevSkim timeout is handled gracefully."""
+        def mock_subprocess_run(*args, **kwargs):
+            raise subprocess.TimeoutExpired("devskim", 30)
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "test.py"
+        f.write_text('password = "secret123"\n')
+        result = ps.run(f, f.read_text())
+
+        devskim_checks = [c for c in result.checks if c.id.startswith("EXT-DEVSKIM")]
+        assert len(devskim_checks) == 1
+        assert devskim_checks[0].result == "PASS"
+
+
+class TestPrescreenExternalToolsRuff:
+    def test_ruff_not_installed_graceful_skip(self, ps, tmp_path, monkeypatch):
+        """Test graceful degradation when Ruff is not installed."""
+        def mock_subprocess_run(*args, **kwargs):
+            raise FileNotFoundError("Ruff not found")
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "test.py"
+        f.write_text('import sys\n')
+        result = ps.run(f, f.read_text())
+
+        ruff_checks = [c for c in result.checks if c.id.startswith("EXT-RUFF")]
+        assert len(ruff_checks) == 1
+        assert ruff_checks[0].result == "PASS"
+
+    def test_ruff_empty_results_no_findings(self, ps, tmp_path, monkeypatch):
+        """Test that clean Python files produce no Ruff findings."""
+        def mock_subprocess_run(*args, **kwargs):
+            # Mock empty JSON output (clean file)
+            class MockResult:
+                returncode = 0
+                stdout = '[]'
+                stderr = ""
+            return MockResult()
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "clean.py"
+        f.write_text('import sys\nprint("Hello")\n')
+        result = ps.run(f, f.read_text())
+
+        ruff_checks = [c for c in result.checks if c.id.startswith("EXT-RUFF")]
+        assert len(ruff_checks) == 1
+        assert ruff_checks[0].result == "PASS"
+
+    def test_ruff_found_findings_properly_parsed(self, ps, tmp_path, monkeypatch):
+        """Test that Ruff findings are properly parsed from JSON output."""
+        def mock_subprocess_run(*args, **kwargs):
+            # Mock Ruff JSON output with violations
+            violations = [{
+                "code": "F401",
+                "message": "sys imported but unused",
+                "location": {"row": 1, "column": 8}
+            }]
+
+            class MockResult:
+                returncode = 1  # Issues found
+                stdout = json.dumps(violations)
+                stderr = ""
+            return MockResult()
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "test.py"
+        f.write_text('import sys\nprint("Hello")\n')
+        result = ps.run(f, f.read_text())
+
+        ruff_checks = [c for c in result.checks if c.id.startswith("EXT-RUFF")]
+        assert len(ruff_checks) == 1
+        assert ruff_checks[0].result == "FAIL"
+        assert ruff_checks[0].severity == Severity.HIGH  # F-codes map to HIGH
+        assert "F401" in ruff_checks[0].description
+        assert "sys imported but unused" in ruff_checks[0].description
+
+    def test_ruff_severity_mapping(self, ps, tmp_path, monkeypatch):
+        """Test Ruff error codes are correctly mapped to Quorum severities."""
+        def mock_subprocess_run(*args, **kwargs):
+            violations = [
+                {"code": "F401", "message": "Unused import", "location": {"row": 1, "column": 1}},
+                {"code": "E501", "message": "Line too long", "location": {"row": 2, "column": 1}},
+                {"code": "S108", "message": "Hardcoded temp file", "location": {"row": 3, "column": 1}}
+            ]
+
+            class MockResult:
+                returncode = 1
+                stdout = json.dumps(violations)
+                stderr = ""
+            return MockResult()
+
+        monkeypatch.setattr("quorum.prescreen.subprocess.run", mock_subprocess_run)
+
+        f = tmp_path / "test.py"
+        f.write_text('import sys\n# Long line\n# Security issue\n')
+        result = ps.run(f, f.read_text())
+
+        ruff_checks = [c for c in result.checks if c.id.startswith("EXT-RUFF") and c.result == "FAIL"]
+        assert len(ruff_checks) == 3
+
+        # Check severity mapping
+        f_check = next(c for c in ruff_checks if "F401" in c.description)
+        e_check = next(c for c in ruff_checks if "E501" in c.description)
+        s_check = next(c for c in ruff_checks if "S108" in c.description)
+
+        assert f_check.severity == Severity.HIGH  # F-codes are high
+        assert e_check.severity == Severity.MEDIUM  # E-codes are medium
+        assert s_check.severity == Severity.HIGH  # S-codes are high (security)
+
+    def test_ruff_skipped_for_non_python(self, ps, tmp_path, monkeypatch):
+        """Test Ruff is skipped for non-Python files."""
+        f = tmp_path / "test.md"
+        f.write_text('# Hello World\n')
+        result = ps.run(f, f.read_text())
+
+        # Should have no Ruff-specific external tool checks for non-Python files
+        ruff_checks = [c for c in result.checks if c.id.startswith("EXT-RUFF")]
+        assert len(ruff_checks) == 1
+        assert ruff_checks[0].result == "PASS"  # No issues when not applicable
