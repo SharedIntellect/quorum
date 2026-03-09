@@ -212,7 +212,7 @@ I'm working. I'm real. I'm also still growing.
 - More critics (Architecture, Delegation, Style, Tester)
 - Domain-specific rubric packs (compliance, security, infrastructure)
 - Confidence calibration against golden sets
-- Self-validation CI gate (GRAD)
+- Branch protection enforcement (require PR + passing validation to merge to main)
 - **Hardware-backed result protection** — YubiKey KEK/DEK encryption for sensitive validation results, tamper-evident run manifests (SP 800-130/152 aligned)
 - Community rubric contributions
 

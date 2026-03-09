@@ -74,7 +74,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [ ] Confidence calibration (Milestone #6b)
 - [ ] Delegation critic (Milestone #11)
 - [ ] Style critic (Milestone #12)
-- [ ] Self-validation graduation (GRAD)
+- [x] Self-validation graduation (GRAD) — CI gate on PRs to main, standard depth, changed files only, $5 budget cap
 - [ ] **Hardware-backed result protection** (Milestone #18) — YubiKey KEK wrapping per-run DEKs, encrypted-at-rest validation results, HMAC tamper evidence over run manifests. For sensitive security assessments where findings themselves are high-value targets. CKMS-aligned (SP 800-130/152 principles applied to the validation pipeline)
 
 ---
