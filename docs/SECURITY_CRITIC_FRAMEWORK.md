@@ -18,12 +18,12 @@
 - [x] OWASP ASVS 5.0, CWE Top 25, NIST SP 800-53 SA-11 grounding
 - [x] Detection capability matrix for SAST vs LLM judgment boundaries
 - [ ] Full SAST tool integration (Ruff/Bandit/PSScriptAnalyzer) — Milestone #15, v0.5.2
-- [ ] Threat model context feeding for SEC-04 (Authorization) — v0.5.3 planned
+- [ ] Threat model context feeding for SEC-04 (Authorization) — schema defined in `quorum-relationships.example.yaml` (`threat_context` type); runtime integration v0.5.3 planned
 - [ ] Learning memory wiring (issue tracking) — v0.6+
 
 **Known Limitations:**
 - Pre-screen layer runs 10 regex checks; 80+ referenced SAST rules not yet integrated
-- Authorization review (SEC-04) is speculative without threat model context
+- Authorization review (SEC-04) is speculative without threat model context — users can now define `threat_context` in the relationship manifest (roles, trust boundaries, sensitive operations); runtime feeding to the critic is planned for v0.5.3
 - PowerShell coverage ~70% vs 85%+ for Python (tooling ecosystem gap)
 
 ---

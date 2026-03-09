@@ -66,6 +66,7 @@ relationships:
 - `documents` → accuracy verification (does documentation match behavior?)
 - `delegates` → boundary verification (is the delegation complete and non-overlapping?)
 - `schema_contract` → structural compatibility verification (do types match?)
+- `threat_context` → security context injection (feeds roles, trust boundaries, and sensitive operations to the Security Critic for SEC-04 authorization review) 🔜
 
 Named roles on both sides (`spec`/`impl`, `source`/`docs`, `producer`/`consumer`) are more self-documenting than generic file lists. The `scope` field on `delegates` supports partial relationships, which is where real-world contracts live.
 
