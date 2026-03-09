@@ -6,8 +6,6 @@ metadata: {"openclaw":{"requires":{"bins":["python3","pip"],"env":["ANTHROPIC_AP
 
 # Quorum — Multi-Agent Validation
 
-> **⚠️ BOUNDARY DOCUMENT:** Before modifying, publishing, or releasing any Quorum code, config, or documentation, read and follow `portfolio/research-infrastructure/VALIDATOR-QUORUM-BOUNDARY.md`. This file defines the Validator (internal) / Quorum (public) boundary, what graduates and what stays proprietary, and CKMS naming conventions. No exceptions.
-
 Quorum validates AI agent outputs by spawning multiple independent critics that evaluate artifacts against rubrics. Every criticism must cite evidence. You get a structured verdict.
 
 ## Quick Start
