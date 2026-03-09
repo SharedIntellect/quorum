@@ -108,6 +108,12 @@ def cli(verbose: bool) -> None:
     default=False,
     help="Print full evidence for all findings (not just CRITICAL/HIGH)",
 )
+@click.option(
+    "--no-learning",
+    is_flag=True,
+    default=False,
+    help="Disable learning memory for this run (do not read or write known_issues.json)",
+)
 def run_cmd(
     target: str,
     pattern: str | None,
@@ -118,6 +124,7 @@ def run_cmd(
     relationships: Path | None,
     fix_loops: int | None,
     verbose: bool,
+    no_learning: bool,
 ) -> None:
     """
     Validate artifacts against a rubric.
@@ -191,6 +198,7 @@ def run_cmd(
                 runs_dir=output_dir or Path("quorum-runs"),
                 relationships_path=relationships,
             )
+            # Note: learning memory is not applied per-file in batch mode
 
             print_batch_verdict(batch_verdict, batch_dir=batch_dir, verbose=verbose)
 
@@ -219,10 +227,15 @@ def run_cmd(
                 config=quorum_config,
                 runs_dir=output_dir or Path("quorum-runs"),
                 relationships_path=relationships,
+                enable_learning=not no_learning,
             )
 
             # Show fix loop progress summary if loops ran
             _print_fix_loop_summary(run_dir)
+
+            # Show learning memory update summary
+            if not no_learning:
+                _print_learning_summary(run_dir)
 
             print_verdict(verdict, run_dir=run_dir, verbose=verbose)
 
@@ -305,6 +318,79 @@ def config_init() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# quorum issues
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@cli.group("issues")
+def issues_group() -> None:
+    """Manage learning memory (known recurring failure patterns)."""
+
+
+@issues_group.command("list")
+def issues_list() -> None:
+    """Show all known issues (pattern_id, description, frequency, mandatory, last_seen)."""
+    from quorum.learning import LearningMemory
+
+    lm = LearningMemory()
+    issues = lm.load()
+
+    if not issues:
+        click.echo("No known issues found.")
+        click.echo(f"  (learning memory path: {lm.path})")
+        return
+
+    click.echo(f"\n{'ID':<14} {'Freq':<6} {'Mand':<6} {'Last Seen':<12} Description")
+    click.echo("─" * 80)
+    for issue in sorted(issues, key=lambda i: -i.frequency):
+        mand = "yes" if issue.mandatory else "no"
+        click.echo(
+            f"{issue.pattern_id:<14} {issue.frequency:<6} {mand:<6} "
+            f"{issue.last_seen:<12} {issue.description[:48]}"
+        )
+    click.echo(f"\n{len(issues)} pattern(s) in {lm.path}")
+
+
+@issues_group.command("promote")
+@click.option(
+    "--threshold",
+    default=3,
+    show_default=True,
+    type=int,
+    help="Promote all patterns with frequency >= this threshold to mandatory",
+)
+def issues_promote(threshold: int) -> None:
+    """Manually promote recurring patterns to mandatory checks."""
+    from quorum.learning import LearningMemory
+
+    lm = LearningMemory()
+    promoted = lm.promote(threshold=threshold)
+    if promoted:
+        click.echo(f"Promoted {promoted} pattern(s) to mandatory (threshold={threshold}).")
+    else:
+        click.echo(f"No patterns to promote at threshold={threshold}.")
+
+
+@issues_group.command("reset")
+def issues_reset() -> None:
+    """Clear known_issues.json (prompts for confirmation)."""
+    from quorum.learning import LearningMemory
+
+    lm = LearningMemory()
+    if not lm.path.exists():
+        click.echo(f"No known_issues.json found at {lm.path}.")
+        return
+
+    issues = lm.load()
+    click.confirm(
+        f"Delete {lm.path} ({len(issues)} pattern(s))?",
+        abort=True,
+    )
+    lm.path.unlink()
+    click.echo("known_issues.json cleared.")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # First-run helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -338,6 +424,32 @@ def _print_fix_loop_summary(run_dir: Path) -> None:
     if fixed_artifact.exists():
         click.echo(f"  Fixed artifact: {fixed_artifact}", err=True)
     click.echo("", err=True)
+
+
+def _print_learning_summary(run_dir: Path) -> None:
+    """Print learning memory update summary from the run manifest."""
+    import json as _json
+    manifest_path = run_dir / "run-manifest.json"
+    if not manifest_path.exists():
+        return
+    try:
+        data = _json.loads(manifest_path.read_text())
+        learning = data.get("learning")
+        if not learning:
+            return
+        new = learning.get("new_patterns", 0)
+        updated = learning.get("updated_patterns", 0)
+        promoted = learning.get("promoted_patterns", 0)
+        total = learning.get("total_known", 0)
+        if new or updated or promoted:
+            click.echo(
+                f"Learning memory: +{new} new pattern(s), "
+                f"{updated} updated, {promoted} promoted to mandatory "
+                f"({total} total known)",
+                err=True,
+            )
+    except Exception:
+        pass  # Non-fatal: summary is informational only
 
 
 def _has_api_key() -> bool:

@@ -25,6 +25,7 @@ from pathlib import Path
 from quorum.agents.aggregator import AggregatorAgent
 from quorum.agents.supervisor import SupervisorAgent
 from quorum.config import QuorumConfig
+from quorum.learning import LearningMemory
 from quorum.models import BatchVerdict, CriticResult, FileResult, FixProposal, Severity, Verdict, VerdictStatus
 from quorum.providers.litellm_provider import LiteLLMProvider
 from quorum.rubrics.loader import RubricLoader
@@ -260,6 +261,7 @@ def _update_manifest(
     verdict: Verdict,
     critic_results: list,
     relationships_path: Path | None,
+    learning_stats: dict | None = None,
 ) -> None:
     """Update run manifest with final stats."""
     prescreen_stats: dict = {"prescreen_enabled": config.enable_prescreen}
@@ -288,6 +290,8 @@ def _update_manifest(
             manifest_data["relationships_count"] = len(rels)
         except Exception:
             pass
+    if learning_stats:
+        manifest_data["learning"] = learning_stats
     _write_json(manifest_path, manifest_data)
 
 
@@ -298,6 +302,7 @@ def run_validation(
     config: QuorumConfig | None = None,
     runs_dir: Path | None = None,
     relationships_path: Path | None = None,
+    enable_learning: bool = True,
 ) -> tuple[Verdict, Path]:
     """
     Run a full Quorum validation against a target artifact.
@@ -310,6 +315,7 @@ def run_validation(
         runs_dir:           Where to write the run directory (default: ./quorum-runs/)
         relationships_path: Optional path to quorum-relationships.yaml for Phase 2
                             cross-artifact consistency validation
+        enable_learning:    Whether to read/write learning memory (default: True)
 
     Returns:
         Tuple of (Verdict, run_dir) — the final verdict and the Path to the run output directory
@@ -327,6 +333,21 @@ def run_validation(
         target, config, rubric_name, runs_dir, relationships_path,
     )
 
+    # Load learning memory and get mandatory context for critics
+    learning_memory = None
+    mandatory_context: str | None = None
+    if enable_learning:
+        try:
+            learning_memory = LearningMemory()
+            mandatory_context = learning_memory.to_critic_context() or None
+            if mandatory_context:
+                logger.info(
+                    "Learning memory: %d mandatory pattern(s) injected into critic prompts",
+                    len(learning_memory.get_mandatory()),
+                )
+        except Exception as e:
+            logger.warning("Learning memory load failed (non-fatal): %s", e)
+
     provider = LiteLLMProvider(api_keys=config.api_keys)
     prescreen_result = _run_prescreen(config, target, artifact_text, run_dir)
 
@@ -337,6 +358,7 @@ def run_validation(
         artifact_path=str(target),
         rubric=rubric,
         prescreen_result=prescreen_result,
+        mandatory_context=mandatory_context,
     )
 
     # Save Phase 1 critic results
@@ -495,7 +517,32 @@ def run_validation(
     # Save outputs and update manifest
     _write_json(run_dir / "verdict.json", verdict.model_dump())
     _write_report(run_dir / "report.md", verdict, target, rubric, config, fix_report=fix_report)
-    _update_manifest(run_dir, config, prescreen_result, verdict, critic_results, relationships_path)
+
+    # Update learning memory with findings from this run
+    learning_stats: dict = {}
+    if enable_learning and learning_memory is not None:
+        try:
+            domain = supervisor.classify_domain(artifact_text, str(target))
+            all_findings = verdict.report.findings if verdict.report else []
+            update_result = learning_memory.update_from_findings(all_findings, domain)
+            learning_stats = {
+                "new_patterns": update_result.new_patterns,
+                "updated_patterns": update_result.updated_patterns,
+                "promoted_patterns": update_result.promoted_patterns,
+                "total_known": update_result.total_known,
+            }
+            logger.info(
+                "Learning memory: +%d new, %d updated, %d promoted (%d total)",
+                update_result.new_patterns, update_result.updated_patterns,
+                update_result.promoted_patterns, update_result.total_known,
+            )
+        except Exception as e:
+            logger.warning("Learning memory update failed (non-fatal): %s", e)
+
+    _update_manifest(
+        run_dir, config, prescreen_result, verdict, critic_results,
+        relationships_path, learning_stats,
+    )
 
     logger.info(
         "Run complete: verdict=%s | %d findings | run_dir=%s",

@@ -323,6 +323,14 @@ class Issue(BaseModel):
         return self.model_dump()
 
 
+class UpdateResult(BaseModel):
+    """Result of a learning memory update after a validation run."""
+    new_patterns: int = 0
+    updated_patterns: int = 0
+    promoted_patterns: int = 0
+    total_known: int = 0
+
+
 class RubricCriterion(BaseModel):
     """A single evaluation criterion in a rubric."""
     id: str

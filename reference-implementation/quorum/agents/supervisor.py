@@ -114,6 +114,7 @@ class SupervisorAgent:
         artifact_text: str,
         rubric: Rubric,
         merged_context: dict[str, Any] | None,
+        mandatory_context: str | None = None,
     ) -> CriticResult:
         """Run a single critic, returning CriticResult (never raises)."""
         logger.info("Running critic: %s", critic.name)
@@ -122,6 +123,7 @@ class SupervisorAgent:
                 artifact_text=artifact_text,
                 rubric=rubric,
                 extra_context=merged_context if merged_context else None,
+                mandatory_context=mandatory_context,
             )
             logger.info(
                 "Critic %s: %d findings (confidence=%.2f)",
@@ -146,6 +148,7 @@ class SupervisorAgent:
         rubric: Rubric,
         extra_context: dict[str, Any] | None = None,
         prescreen_result: PreScreenResult | None = None,
+        mandatory_context: str | None = None,
     ) -> list[CriticResult]:
         """
         Run all critics against the artifact.
@@ -157,6 +160,7 @@ class SupervisorAgent:
             extra_context:    Optional context injected into critic prompts
             prescreen_result: Optional pre-screen results to inject as
                               pre-verified evidence into every critic prompt
+            mandatory_context: Known recurring patterns prepended to system prompts
 
         Returns:
             List of CriticResult, one per critic that ran successfully
@@ -191,7 +195,8 @@ class SupervisorAgent:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(
-                    self._run_one_critic, critic, artifact_text, rubric, merged_context
+                    self._run_one_critic,
+                    critic, artifact_text, rubric, merged_context, mandatory_context,
                 ): critic
                 for critic in critics
             }

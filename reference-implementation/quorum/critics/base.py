@@ -105,6 +105,7 @@ class BaseCritic(abc.ABC):
         artifact_text: str,
         rubric: Rubric,
         extra_context: dict[str, Any] | None = None,
+        mandatory_context: str | None = None,
     ) -> CriticResult:
         """
         Evaluate the artifact against the rubric.
@@ -116,9 +117,10 @@ class BaseCritic(abc.ABC):
         4. Returns a CriticResult
 
         Args:
-            artifact_text: Full text of the artifact
-            rubric: Domain-specific rubric
-            extra_context: Optional extra context (tool results, known issues, etc.)
+            artifact_text:     Full text of the artifact
+            rubric:            Domain-specific rubric
+            extra_context:     Optional extra context (tool results, known issues, etc.)
+            mandatory_context: Known recurring patterns to prepend to the system prompt
 
         Returns:
             CriticResult with zero or more evidence-grounded findings
@@ -131,8 +133,12 @@ class BaseCritic(abc.ABC):
             if extra_context:
                 prompt += f"\n\n### Additional Context\n{extra_context}"
 
+            system = self.system_prompt
+            if mandatory_context:
+                system = mandatory_context + "\n\n" + system
+
             messages = [
-                {"role": "system", "content": self.system_prompt},
+                {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ]
 
