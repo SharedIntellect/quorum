@@ -75,6 +75,46 @@ def process_order(quantity: int, price: Decimal) -> Order:
 
 This is the weakest path — it depends on documentation accuracy and completeness. But it's better than nothing when rubrics and manifests aren't available.
 
+**When Option C works well:** Docstrings follow a consistent pattern (e.g., `Business rules:` header), rules are co-located with the code they govern, and the codebase has reasonable documentation coverage.
+
+**When Option C produces junk findings:** Business rules are scattered across comments, commit messages, Slack threads, or tribal knowledge. The critic finds docstrings but they describe *what* the function does, not *what constraints it must enforce*. If your inline docs don't express rules, use Option A or B instead.
+
+### Composing Relationship Types — Full Manifest Example
+
+A single `quorum-relationships.yaml` can combine `implements`, `threat_context`, and other relationship types to give critics a complete picture:
+
+```yaml
+# quorum-relationships.yaml — e-commerce order service
+relationships:
+  # Code implements the order specification
+  - type: implements
+    source: docs/order-spec.md
+    target: app/orders/views.py
+
+  # Threat model context for authorization + business logic
+  - type: threat_context
+    target: app/orders/views.py
+    context:
+      sensitive_operations:
+        - "Order creation (quantity 1-9999, price from catalog only)"
+        - "Discount application (0-100%, manager role required)"
+        - "Refund processing (cannot exceed original total)"
+      roles: ["customer", "manager", "admin"]
+      trust_boundary: "All inputs cross trust boundary from public API"
+
+  # Schema contract between API and database
+  - type: schema_contract
+    source: app/orders/serializers.py
+    target: app/orders/models.py
+
+  # Documents relationship for cross-artifact consistency
+  - type: documents
+    source: docs/order-spec.md
+    target: app/orders/models.py
+```
+
+This manifest feeds the Security Critic (SEC-02 business logic + SEC-04 authorization), the Correctness Critic (implements relationship), and the Cross-Artifact Consistency check (all relationships). One file, multiple critics, composable.
+
 ### Stage 2: Critic Evaluation
 
 The Security Critic evaluates business logic validation using this checklist:
@@ -88,6 +128,22 @@ The Security Critic evaluates business logic validation using this checklist:
 | **Privilege-gated operations** | Are sensitive operations (refund, delete, admin actions) role-checked? | Authorization check before the operation |
 | **Idempotency** | Can the same request be safely repeated? Double-submit protection? | Idempotency keys or duplicate detection |
 | **Rate limiting on business operations** | Can a user trigger expensive operations without throttling? | Rate limit or queue mechanism |
+
+### Severity Calibration
+
+Not all business logic gaps carry equal weight. Use these defaults unless domain context overrides:
+
+| Check | Typical Severity | Rationale |
+|-------|-----------------|-----------|
+| **Boundary enforcement** | **HIGH** | Direct data corruption, financial impact (negative quantities, overflow) |
+| **State transition validity** | **HIGH** | Invalid state transitions can be irreversible and break downstream workflows |
+| **Cross-field consistency** | **MEDIUM** | Usually caught by downstream validation or database constraints; becomes HIGH if financial |
+| **Negative/zero handling** | **HIGH** when financial, **MEDIUM** otherwise | A negative dollar amount is worse than a negative page count |
+| **Privilege-gated operations** | **CRITICAL** if admin/financial, **HIGH** otherwise | Missing authorization on sensitive ops is always severe |
+| **Idempotency** | **MEDIUM** | Duplicated operations are usually recoverable; becomes **HIGH** if financial (double-charge) |
+| **Rate limiting** | **MEDIUM** | Abuse potential varies; becomes **HIGH** if expensive operations (bulk email, payment processing) |
+
+The critic uses these defaults when no explicit severity is declared in rubric criteria. Override by setting `"severity"` in your rubric criterion definition.
 
 ### Stage 3: Finding Generation
 
@@ -134,6 +190,20 @@ Business logic validation intersects with:
 | **SEC-01 (Injection)** | Input that passes business validation but contains injection payloads. Business validation runs first; sanitization must also run. |
 | **SEC-08 (Path Traversal)** | File paths that are valid business inputs but traverse outside allowed directories. |
 | **SEC-14 (DoS)** | Business operations that are individually valid but can be abused at volume (e.g., bulk order creation without rate limiting). |
+
+---
+
+## Depth Levels and SEC-02
+
+Business logic checks are available at **standard** and **thorough** depth:
+
+| Depth | SEC-02 Coverage | Notes |
+|-------|----------------|-------|
+| **quick** | ❌ Not run | Quick runs only pre-screen + Correctness + Completeness. Security critic is not dispatched. |
+| **standard** | ✅ Full SEC-02 | Security critic runs with all business logic checks. Rubric criteria and threat_context are evaluated. No fix loops. |
+| **thorough** | ✅ Full SEC-02 + fix loop | Same coverage as standard, plus the Fixer proposes remediations for CRITICAL/HIGH findings and re-validates. |
+
+If you need business logic validation, use `--depth standard` at minimum. The `quick` depth is designed for fast feedback on obvious issues, not comprehensive security review.
 
 ---
 

@@ -5,7 +5,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ba4c8.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/platform-OpenClaw-2ba4c8" alt="Platform: OpenClaw">
-  <img src="https://img.shields.io/badge/status-v0.5.2-2ba4c8" alt="Status: v0.5.2">
+  <img src="https://img.shields.io/badge/status-v0.5.3-2ba4c8" alt="Status: v0.5.3">
   <a href="https://clawhub.ai/dacervera/quorum"><img src="https://img.shields.io/badge/ClawHub-dacervera%2Fquorum-2ba4c8" alt="Available on ClawHub"></a>
 </p>
 
@@ -51,7 +51,7 @@ You've got options. You could ask your agent to self-review. You could eyeball i
 | One model reviews its own output | I bring in **separate critics** that never saw the original prompt |
 | "This looks great!" — it wrote it, of course it thinks so | My critics come in cold. **No bias from the creation process** |
 | Vague suggestions you can't act on | **Every finding cites evidence** — an excerpt, a grep result, a schema check |
-| LLM spends tokens on obvious problems | **Pre-screen catches 10 deterministic issues + DevSkim SAST first** — hardcoded creds, PII, syntax errors, security patterns — before LLM runs |
+| LLM spends tokens on obvious problems | **Multi-layer pre-screen catches issues first** — 10 deterministic checks + DevSkim + Ruff + Bandit + PSScriptAnalyzer — before LLM runs |
 | Reviews only one file at a time | **Batch validation** — run across a whole directory, or by `--pattern "*.md"`. One command, one verdict per file |
 | Each file judged in isolation | **Cross-artifact consistency** — I check whether your files actually agree with each other via a relationships manifest |
 | Same effort whether it's a quick sanity check or a full audit | I scale: **quick** ($0.15), **standard** ($0.50), **thorough** ($2.00+) |
@@ -111,7 +111,7 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
 | **Standard** | 4 (+ security, code_hygiene) | 15-30 min | ~$0.50 | Most work — solid coverage without the wait |
 | **Thorough** | 4 now; more when they ship | 30-60 min | ~$1.50+ | "This is going to production. It cannot be wrong." |
 
-*Estimates on Claude Sonnet. Scales with model and artifact size. Pre-screen (10 deterministic checks + DevSkim SAST) runs before LLM critics at every depth level — no extra cost. Today I ship with 4 critics (Correctness, Completeness, Security, Code Hygiene). Architecture, Delegation, and Tester are coming — the full architecture supports all 9 (see [SPEC.md](SPEC.md)).
+*Estimates on Claude Sonnet. Scales with model and artifact size. Pre-screen (10 deterministic checks + DevSkim + Ruff + Bandit + PSScriptAnalyzer) runs before LLM critics at every depth level — no extra cost. Today I ship with 4 critics (Correctness, Completeness, Security, Code Hygiene) + re-validation loops + learning memory. Architecture, Delegation, and Tester are coming — the full architecture supports all 9 (see [SPEC.md](SPEC.md)).
 
 ---
 
@@ -121,7 +121,7 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
          You: "Validate this"
                    │
           ┌────────┴────────┐
-          │   Pre-Screen    │  10 deterministic checks + DevSkim SAST — runs instant, no LLM
+          │   Pre-Screen    │  10 deterministic + DevSkim + Ruff + Bandit + PSSA — instant, no LLM
           └───────┬─────────┘  (credentials, PII, syntax, broken links, TODOs, security patterns)
                   │ prescreen.json
           ┌───────┴─────────┐
@@ -188,28 +188,27 @@ I auto-detect your model on first run and configure myself accordingly. Details:
 
 I'm working. I'm real. I'm also still growing.
 
-**What I can do today** (v0.5.2):
-- Full CLI: `quorum run --target <file> [--depth] [--rubric] [--pattern] [--relationships] [--output-dir] [--verbose]`
+**What I can do today** (v0.5.3):
+- Full CLI: `quorum run --target <file> [--depth] [--rubric] [--pattern] [--relationships] [--output-dir] [--verbose] [--fix-loops N] [--no-learning]`
 - **4 critics** — Correctness, Completeness, Security (OWASP ASVS 5.0, CWE Top 25, NIST SA-11; see [SEC-02 workflow](docs/SEC02_BUSINESS_LOGIC_VALIDATION.md) for business logic validation guidance), Code Hygiene (ISO 25010:2023, CISQ) — all with evidence grounding
 - **Parallel execution** — critics run concurrently (ThreadPoolExecutor, max 4); batch files run concurrently (max 3)
-- **Fixer agent** — proposes concrete text replacements for CRITICAL/HIGH findings; activates at `--depth thorough` (or when `max_fix_loops > 0`)
-- **Deterministic pre-screen** — 10 fast checks (hardcoded paths, credentials, PII, JSON/YAML/Python syntax, broken links, TODOs, whitespace, empty files) + **DevSkim SAST** (second linter pass, ~690 lines of security pattern rules) — both run before any LLM
+- **Re-validation loops** — Fixer proposes text replacements for CRITICAL/HIGH findings → applies them → re-runs only the critics that flagged the originals → reports improved/unchanged/regressed. Up to 3 loops, stops early when findings clear. `--fix-loops N` or `--depth thorough` (default 1 loop)
+- **Learning memory** — tracks recurring failure patterns across runs in `known_issues.json`. High-frequency patterns auto-promote to mandatory checks injected into critic prompts. `quorum issues list|promote|reset` CLI. Disable with `--no-learning`
+- **Multi-layer pre-screen** — 10 built-in deterministic checks + **DevSkim SAST** + **Ruff S-rules** (Python security) + **Bandit** (Python security, deduplicated with Ruff) + **PSScriptAnalyzer** (PowerShell security) — all run before any LLM, all gracefully degrade if not installed
 - **Batch validation** — `--target ./dir/` or `--pattern "*.md"` to validate many files at once; get a consolidated `BatchVerdict`
-- **Cross-artifact consistency** — `--relationships quorum-relationships.yaml` to declare implements/documents/delegates/`threat_context` relationships between files and check them (new: `threat_context` type supports authorization boundary review per SEC-04)
-- **Structured output resilience** — critic JSON responses now strip markdown fences before parsing; reduces parse failures on model outputs that wrap JSON in code blocks
+- **Cross-artifact consistency** — `--relationships quorum-relationships.yaml` to declare implements/documents/delegates/`threat_context` relationships between files and check them (`threat_context` type supports authorization boundary review per SEC-04)
+- **Structured output resilience** — critic JSON responses strip markdown fences before parsing; reduces parse failures on model outputs that wrap JSON in code blocks
 - **Custom rubric loading** — `--rubric ./my-rubric.json`
 - 3 built-in rubrics (research-synthesis, agent-config, python-code — auto-detected on `.py` files)
 - Auto-configuration on first run
 - LiteLLM universal provider (100+ models)
-- Full audit trail for every run (timestamped run directory with prescreen.json, critic JSONs, verdict.json, report.md)
-- Available on ClawHub: `openclaw skills add dacervera/quorum`
+- Full audit trail for every run (timestamped run directory with prescreen.json, critic JSONs, verdict.json, fix-proposals-loop-N.json, report.md)
+- Available on PyPI: `pip install quorum-validator` | ClawHub: `openclaw skills add dacervera/quorum`
 
 **What's coming:**
 - More critics (Architecture, Delegation, Style, Tester)
-- Re-validation loops (apply fixes → re-run critics → verify)
 - Domain-specific rubric packs (compliance, security, infrastructure)
-- Learning memory that sharpens over time
-- Confidence calibration
+- Confidence calibration against golden sets
 - Community rubric contributions
 
 ---

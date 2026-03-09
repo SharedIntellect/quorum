@@ -14,7 +14,7 @@ Quorum is a quality assurance framework with a nine-agent target architecture. C
 - **Parallel specialized critics** (9 agents with distinct expertise)
 - **Grounded evidence requirement** (every critique must cite tool-verified proof)
 - **Intelligent delegation** (Tomasev et al., 2026 principles)
-- **Specified learning memory** (persistent failure-pattern accumulation; not yet wired into production runs)
+- **Learning memory** (persistent failure-pattern tracking; recurring patterns auto-promote to mandatory critic checks)
 - **Cost-aware depth control** (three execution profiles for different budgets)
 
 Quorum treats validation as infrastructure, not an afterthought.
@@ -28,7 +28,7 @@ Quorum treats validation as infrastructure, not an afterthought.
 A single model reviewing a long prompt generates:
 - Single point of failure (one model's blindspots)
 - Hand-waving without evidence (LLMs can justify anything)
-- No learning across validations (each run forgets the last)
+- ~~No learning across validations~~ → **Solved in v0.5.3:** Learning memory tracks recurring patterns and promotes high-frequency findings to mandatory checks
 
 Quorum uses **nine specialized critics in parallel**, each with deep expertise in:
 
@@ -357,7 +357,7 @@ Rules:
 - Patterns with frequency ≥ 5 trigger **automation opportunities** (design tools to check this deterministically)
 - Patterns go stale after 60 days without recurrence (removed from mandatory list)
 
-This is the planned system-level learning architecture. Implementation is v0.6+.
+This learning architecture is implemented as of v0.5.3. See `quorum issues list|promote|reset` CLI commands and `--no-learning` flag.
 
 ---
 
@@ -454,7 +454,7 @@ Quorum is built on these peer-reviewed papers:
 
 - Remaining critics: Architecture, Delegation, Style, Tester
 - Re-validation loops — apply Fixer proposals, re-run critics, verify resolution
-- Learning memory — wiring up `known_issues.json` accumulation and mandatory-check promotion
+- ~~Learning memory~~ → **Shipped in v0.5.3**
 - Dynamic critic specialization (spawn domain-specific critics on-demand)
 - Critic debate mode (when two critics conflict, run a structured debate)
 - Semantic pattern deduplication (group similar issues under one ML pattern)

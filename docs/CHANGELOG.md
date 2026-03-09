@@ -4,6 +4,53 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.3] — 2026-03-09
+
+### Added
+
+#### Re-Validation Loops (Milestone #5c)
+- **Fix-verify cycle**: Fixer proposes text replacements for CRITICAL/HIGH findings → applies them to a working copy → re-runs only the critics that flagged the originals → compares before/after
+- **Delta tracking**: each loop reports `improved`, `unchanged`, or `regressed` with finding counts
+- **Loop control**: stops early when all findings clear, no proposals generated, or `max_fix_loops` reached (max 3)
+- **CLI flag**: `--fix-loops N` overrides depth profile default; `--depth thorough` defaults to 1 loop
+- **Immutable originals**: fixed artifacts saved as `artifact-fixed.txt` in run directory; original file never modified
+- Per-loop audit trail: `fix-proposals-loop-N.json` saved for each iteration
+
+#### Learning Memory (Milestone #7)
+- **Recurring pattern tracking**: `known_issues.json` stores failure patterns with stable SHA-256 pattern IDs, frequency counts, first/last seen dates
+- **Auto-promotion**: patterns seen ≥3 times automatically promoted to mandatory checks
+- **Critic injection**: mandatory patterns prepended to critic system prompts as natural language instructions — critics are aware of known recurring issues
+- **CLI subcommands**: `quorum issues list` (table view), `quorum issues promote --threshold N`, `quorum issues reset`
+- **Run integration**: learning memory loads at start, updates after verdict, stats written to `run-manifest.json`
+- **Opt-out**: `--no-learning` flag disables for a run
+- Atomic file writes (tmp + rename) to prevent corruption
+
+#### Pre-Screen Expansion (Milestone #15)
+- **Ruff S-rules**: Python security linting via `ruff check --select S` (S1xx → MEDIUM, S2xx+ → HIGH)
+- **Bandit**: Python security analysis with native severity/confidence mapping; deduplicated with Ruff when both present
+- **PSScriptAnalyzer**: PowerShell security rules via `pwsh` — filters to 8 security-relevant rules (AvoidUsingInvokeExpression, AvoidUsingBrokenHashAlgorithms, etc.)
+- All three tools follow the DevSkim pattern: detect if installed, run if available, graceful degradation if not
+- Pre-screen now has 5 layers: built-in regex (PS-001–010) → DevSkim → Ruff → Bandit → PSScriptAnalyzer
+
+### Documentation
+- **docs/README.md** — new documentation index with categorized links to all framework docs
+- **SPEC.md** — Security Critic links to SEC-02 workflow; Fixer updated to reflect re-validation loops; learning memory sections updated from "planned" to "shipped"
+- **README.md** — updated to v0.5.3: re-validation loops, learning memory, multi-layer pre-screen, PyPI install, new CLI flags
+
+### Roadmap Status
+- [x] Re-validation loops (Milestone #5c)
+- [x] Learning memory (Milestone #7)
+- [x] Pre-screen expansion — Ruff, Bandit, PSScriptAnalyzer (Milestone #15)
+- [x] PyPI publish (Milestone #14) — `pip install quorum-validator`
+- [ ] Architecture critic (Milestone #9)
+- [ ] Tester critic (Milestone #10)
+- [ ] Confidence calibration (Milestone #6b)
+- [ ] Delegation critic (Milestone #11)
+- [ ] Style critic (Milestone #12)
+- [ ] Self-validation graduation (GRAD)
+
+---
+
 ## [0.5.2] — 2026-03-08
 
 ### Added

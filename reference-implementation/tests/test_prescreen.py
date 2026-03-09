@@ -869,9 +869,9 @@ class TestPrescreenExternalToolsRuff:
         e_check = next(c for c in ruff_checks if "E501" in c.description)
         s_check = next(c for c in ruff_checks if "S108" in c.description)
 
-        assert f_check.severity == Severity.HIGH  # F-codes are high
+        assert f_check.severity == Severity.HIGH    # F-codes are high
         assert e_check.severity == Severity.MEDIUM  # E-codes are medium
-        assert s_check.severity == Severity.HIGH  # S-codes are high (security)
+        assert s_check.severity == Severity.MEDIUM  # S1xx → MEDIUM per Milestone #15 spec
 
     def test_ruff_skipped_for_non_python(self, ps, tmp_path, monkeypatch):
         """Test Ruff is skipped for non-Python files."""

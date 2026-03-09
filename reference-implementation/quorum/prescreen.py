@@ -21,6 +21,7 @@ import json
 import logging
 import py_compile
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -234,6 +235,29 @@ class PreScreen:
             # Graceful degradation: treat as "no issues found" when tool fails
             checks.append(_pass("EXT-DEVSKIM", "devskim_analysis", "external_tools",
                                Severity.INFO, "No issues found by devskim (tool unavailable)"))
+
+        # Run Bandit SAST (Python only; skip if Ruff is available since S rules cover Bandit)
+        # Deduplication: Ruff S-rules are Bandit rules re-implemented — prefer Ruff when present.
+        if ext == ".py" and not shutil.which("ruff"):
+            try:
+                bandit_findings = self._run_bandit(artifact_path, artifact_text)
+                bandit_checks = self._findings_to_checks(bandit_findings, "bandit")
+                checks.extend(bandit_checks)
+            except Exception as e:
+                logger.warning("Bandit integration failed: %s", e)
+                checks.append(_pass("EXT-BANDIT", "bandit_analysis", "external_tools",
+                                   Severity.INFO, "No issues found by bandit (tool unavailable)"))
+
+        # Run PSScriptAnalyzer (PowerShell files only; graceful degradation if pwsh not installed)
+        if ext == ".ps1":
+            try:
+                pssa_findings = self._run_pssa(artifact_path, artifact_text)
+                pssa_checks = self._findings_to_checks(pssa_findings, "pssa")
+                checks.extend(pssa_checks)
+            except Exception as e:
+                logger.warning("PSScriptAnalyzer integration failed: %s", e)
+                checks.append(_pass("EXT-PSSA", "pssa_analysis", "external_tools",
+                                   Severity.INFO, "No issues found by pssa (tool unavailable)"))
 
         runtime_ms = int(time.time() * 1000) - start_ms
         passed  = sum(1 for c in checks if c.result == "PASS")
@@ -554,9 +578,9 @@ class PreScreen:
             return []
 
         try:
-            # Run ruff check with JSON output
+            # Run ruff check with JSON output, selecting only S (security/bandit) rules
             result = subprocess.run(
-                ["ruff", "check", "--output-format", "json", str(artifact_path)],
+                ["ruff", "check", "--select", "S", "--output-format", "json", str(artifact_path)],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -707,16 +731,206 @@ class PreScreen:
             logger.warning("Failed to parse DevSkim SARIF output: %s", e)
             return []
 
+    def _run_bandit(self, artifact_path: Path, artifact_text: str) -> list[Finding]:
+        """
+        Run Bandit SAST against Python files and convert results to Findings.
+
+        Only runs on .py files. Skipped gracefully if bandit is not installed.
+        Caller is responsible for deduplication against Ruff (prefer Ruff when available).
+        """
+        if artifact_path.suffix.lower() != ".py":
+            return []
+
+        if not shutil.which("bandit"):
+            logger.info("Bandit not installed, skipping Bandit checks")
+            return []
+
+        try:
+            result = subprocess.run(
+                ["bandit", "-f", "json", "-q", str(artifact_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            # bandit exits 0 (clean), 1 (issues found), or non-zero on error
+            if result.returncode not in (0, 1):
+                logger.warning("Bandit failed with exit code %d: %s",
+                               result.returncode, result.stderr)
+                return []
+
+            output = result.stdout.strip()
+            if not output:
+                return []
+
+            data = json.loads(output)
+            findings = []
+
+            for issue in data.get("results", []):
+                test_id = issue.get("test_id", "")
+                test_name = issue.get("test_name", "")
+                severity = self._map_bandit_severity(issue.get("issue_severity", "MEDIUM"))
+                confidence = issue.get("issue_confidence", "")
+                line_num = issue.get("line_number", 1)
+                issue_text = issue.get("issue_text", "")
+
+                # CWE reference if available
+                framework_refs = []
+                cwe = issue.get("issue_cwe", {})
+                if cwe and cwe.get("id"):
+                    framework_refs.append(f"CWE-{cwe['id']}")
+                if test_id:
+                    framework_refs.append(f"BANDIT-{test_id}")
+
+                evidence = Evidence(
+                    tool="bandit",
+                    result=f"[{test_id}] {issue_text} at line {line_num} (confidence: {confidence})"
+                )
+
+                finding = Finding(
+                    severity=severity,
+                    category="security",
+                    description=f"Bandit {test_id} ({test_name}): {issue_text[:100]}",
+                    evidence=evidence,
+                    location=f"line {line_num}",
+                    critic="bandit",
+                    framework_refs=framework_refs
+                )
+                findings.append(finding)
+
+            return findings
+
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+            logger.warning("Bandit execution failed: %s", e)
+            return []
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning("Failed to parse Bandit output: %s", e)
+            return []
+
+    def _run_pssa(self, artifact_path: Path, artifact_text: str) -> list[Finding]:
+        """
+        Run PSScriptAnalyzer via pwsh against PowerShell files.
+
+        Only runs on .ps1 files. Skipped gracefully if pwsh is not installed.
+        Filters to security-relevant rules only.
+        """
+        if artifact_path.suffix.lower() != ".ps1":
+            return []
+
+        if not shutil.which("pwsh"):
+            logger.info("pwsh not installed, skipping PSScriptAnalyzer checks")
+            return []
+
+        # Security-relevant PSSA rules only
+        _PSSA_SECURITY_RULES = {
+            "AvoidUsingConvertToSecureStringWithPlainText",
+            "AvoidUsingUsernameAndPasswordParams",
+            "AvoidUsingPlainTextForPassword",
+            "AvoidUsingInvokeExpression",
+            "AvoidUsingBrokenHashAlgorithms",
+            "AvoidUsingComputerNameHardcoded",
+            "AvoidUsingAllowUnencryptedAuthentication",
+            "UsePSCredentialType",
+        }
+
+        try:
+            ps_command = (
+                f"Invoke-ScriptAnalyzer -Path '{artifact_path}' "
+                "-Severity Warning,Error | ConvertTo-Json"
+            )
+            result = subprocess.run(
+                ["pwsh", "-Command", ps_command],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            if result.returncode != 0:
+                logger.warning("PSScriptAnalyzer failed with exit code %d: %s",
+                               result.returncode, result.stderr)
+                return []
+
+            output = result.stdout.strip()
+            if not output or output == "null":
+                return []
+
+            # PSScriptAnalyzer returns a single object or array; normalise to list
+            raw = json.loads(output)
+            diagnostics = raw if isinstance(raw, list) else [raw]
+
+            findings = []
+            for i, diag in enumerate(diagnostics):
+                rule_name = diag.get("RuleName", "")
+                if rule_name not in _PSSA_SECURITY_RULES:
+                    continue
+
+                severity_str = diag.get("Severity", "Warning")
+                severity = self._map_pssa_severity(severity_str)
+                line_num = diag.get("Line", 1)
+                message = diag.get("Message", "")
+
+                framework_refs = [f"PSSA-{rule_name}"]
+
+                evidence = Evidence(
+                    tool="pssa",
+                    result=f"[{rule_name}] {message} at line {line_num}"
+                )
+
+                finding = Finding(
+                    severity=severity,
+                    category="security",
+                    description=f"PSScriptAnalyzer {rule_name}: {message[:100]}",
+                    evidence=evidence,
+                    location=f"line {line_num}",
+                    critic="pssa",
+                    framework_refs=framework_refs
+                )
+                findings.append(finding)
+
+            return findings
+
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+            logger.warning("PSScriptAnalyzer execution failed: %s", e)
+            return []
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning("Failed to parse PSScriptAnalyzer output: %s", e)
+            return []
+
     def _map_ruff_severity(self, ruff_code: str) -> Severity:
-        """Map Ruff error codes to Quorum severities."""
-        # High priority: Security and important issues
-        if ruff_code.startswith(("E9", "F", "S", "B")):  # Syntax errors, security, bandit
+        """Map Ruff S-rule codes to Quorum severities. S1xx → MEDIUM, S2xx+ → HIGH."""
+        if ruff_code.startswith("S"):
+            try:
+                rule_num = int(ruff_code[1:4])
+                return Severity.MEDIUM if rule_num < 200 else Severity.HIGH
+            except (ValueError, IndexError):
+                return Severity.MEDIUM
+        # Syntax errors → HIGH
+        if ruff_code.startswith(("E9", "F")):
             return Severity.HIGH
-        # Medium priority: Style and complexity
-        if ruff_code.startswith(("E", "W", "C", "N")):  # PEP8, style issues
+        # Style/complexity → MEDIUM
+        if ruff_code.startswith(("E", "W", "C", "N")):
             return Severity.MEDIUM
-        # Low priority: Everything else
         return Severity.LOW
+
+    def _map_bandit_severity(self, bandit_severity: str) -> Severity:
+        """Map Bandit severity strings to Quorum severities."""
+        s = bandit_severity.upper()
+        if s == "HIGH":
+            return Severity.HIGH
+        if s == "MEDIUM":
+            return Severity.MEDIUM
+        if s == "LOW":
+            return Severity.LOW
+        return Severity.MEDIUM
+
+    def _map_pssa_severity(self, pssa_severity: str) -> Severity:
+        """Map PSScriptAnalyzer severity to Quorum severities. Error → HIGH, Warning → MEDIUM."""
+        s = pssa_severity.lower()
+        if s == "error":
+            return Severity.HIGH
+        if s == "warning":
+            return Severity.MEDIUM
+        return Severity.MEDIUM
 
     def _map_devskim_severity(self, devskim_level: str) -> Severity:
         """Map DevSkim severity levels to Quorum severities."""
