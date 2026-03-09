@@ -1,12 +1,16 @@
 # Configuration Reference
 
+> **Implementation Status (v0.5.2):** This document describes both shipped and planned features. Items marked 🔜 are specified but not yet implemented.
+
 ## Depth Profiles
 
 | Profile | Critics | Fix Rounds | Time | Use Case |
 |---------|---------|------------|------|----------|
-| **quick** | 3 (Correctness, Security, Completeness) | 0 | 5–15 min | Iteration, drafts |
-| **standard** | 6 (+ Architecture, Delegation, Style) | 1 on CRITICAL | 15–30 min | Pre-merge, reviews |
-| **thorough** | All 9 + external validator | ≤2 on CRITICAL/HIGH | 45–90 min | Critical decisions, production |
+| **quick** | Shipped critics (currently 4) | 0 | 5–15 min | Iteration, drafts | ✅ Shipped |
+| **standard** | Shipped critics + fixer | 1 on CRITICAL | 15–30 min | Pre-merge, reviews | ✅ Shipped |
+| **thorough** | All shipped critics + fixer | ≤2 on CRITICAL/HIGH | 30–60 min | Critical decisions, production | ✅ Shipped |
+| *standard (full)* | *6 (+ Architecture, Delegation, Style)* | *1 on CRITICAL* | *15–30 min* | *Pre-merge, reviews* | 🔜 Planned |
+| *thorough (full)* | *All 9 + external validator* | *≤2 on CRITICAL/HIGH* | *45–90 min* | *Critical decisions, production* | 🔜 Planned |
 
 ## Model Tiers
 
@@ -14,16 +18,16 @@ Quorum uses a two-tier model architecture. Assign your models based on role requ
 
 | Role | Tier | Reasoning |
 |------|------|-----------|
-| Supervisor | Tier 1 | Orchestration, judgment |
-| Security Critic | Tier 1 | High-stakes assessment |
-| Delegation Critic | Tier 1 | Nuanced contract evaluation |
-| Aggregator | Tier 1 | Synthesis, conflict resolution |
-| Fixer | Tier 1 | Complex remediation |
-| Correctness Critic | Tier 2 | Pattern matching, verification |
-| Architecture Critic | Tier 2 | Structural analysis |
-| Completeness Critic | Tier 2 | Coverage checking |
-| Style Critic | Tier 2 | Convention enforcement |
-| Tester | Tier 2 | Tool execution, grep, schema parsing |
+| Supervisor | Tier 1 | Orchestration, judgment | ✅ Shipped |
+| Security Critic | Tier 1 | High-stakes assessment | ✅ Shipped |
+| Delegation Critic | Tier 1 | Nuanced contract evaluation | 🔜 Planned |
+| Aggregator | Tier 1 | Synthesis, conflict resolution | ✅ Shipped |
+| Fixer | Tier 1 | Complex remediation | ✅ Shipped (proposal mode) |
+| Correctness Critic | Tier 2 | Pattern matching, verification | ✅ Shipped |
+| Architecture Critic | Tier 2 | Structural analysis | 🔜 Planned |
+| Completeness Critic | Tier 2 | Coverage checking | ✅ Shipped |
+| Style Critic | Tier 2 | Convention enforcement | 🔜 Planned |
+| Tester | Tier 2 | Tool execution, grep, schema parsing | 🔜 Planned |
 
 **Examples:** Tier 1 = Claude Opus, GPT-4, Gemini Ultra. Tier 2 = Claude Sonnet, GPT-4o-mini, Gemini Flash.
 
@@ -69,9 +73,11 @@ Rubrics are JSON files with the following structure:
 | **REVISE** | CRITICAL issues found but fixable; or > 2 HIGH issues |
 | **REJECT** | Fundamental architectural or security issues; requires redesign |
 
-## Known Issues / Learning Memory
+## Known Issues / Learning Memory 🔜
 
-The `known_issues.json` file accumulates failure patterns across validation runs:
+> **Status:** Specified in architecture, not yet wired into production runs.
+
+The `known_issues.json` file will accumulate failure patterns across validation runs:
 
 ```json
 {
@@ -87,7 +93,7 @@ The `known_issues.json` file accumulates failure patterns across validation runs
 }
 ```
 
-Patterns with frequency ≥ 3 auto-promote to `mandatory: true` and become required checks in all future runs.
+Patterns with frequency ≥ 3 will auto-promote to `mandatory: true` and become required checks in all future runs.
 
 
 ---

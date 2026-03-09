@@ -2,6 +2,8 @@
 
 This guide walks through building Quorum from the architectural spec. It's structured as a reference walkthrough, not a copy-paste tutorial. The goal is understanding the patterns so you can adapt them to your stack.
 
+> **Implementation Status (v0.5.2):** This guide describes the full target architecture. The reference implementation ships 4/9 critics, the fixer (proposal mode), parallel execution, and pre-screen integration. Sections marked 🔜 describe planned components. See `SPEC.md §3` for the authoritative status matrix.
+
 ---
 
 ## Prerequisites
@@ -123,7 +125,10 @@ You do not write issues yourself. You orchestrate critics who write issues.
 Your job is assignment, coordination, and synthesis — not evaluation.
 ```
 
-### 2.2 The Five Critics
+### 2.2 The Critics
+
+> ✅ **Shipped:** Correctness, Security, Completeness, Code Hygiene (+ Cross-Artifact Consistency in batch mode)
+> 🔜 **Planned:** Architecture, Delegation & Coordination, Style
 
 Each critic receives:
 1. The relevant portion of the artifact (not the whole thing — reduce noise)
@@ -146,17 +151,17 @@ Each critic receives:
 - Tools: grep for required fields, diff against rubric checklist
 - Model tier: Sonnet
 
-**Architecture Critic:**
+**Architecture Critic:** 🔜
 - Checks: design coherence, pattern consistency, scalability, coupling/cohesion
 - Tools: dependency analysis, pattern matching against known anti-patterns
 - Model tier: Sonnet
 
-**Delegation & Coordination Critic:**
+**Delegation & Coordination Critic:** 🔜
 - Checks: span of control, reversibility profile, bidirectional contracts, cognitive friction, dynamic re-delegation triggers
 - Tools: schema parse of contract sections, grep for oversight mechanisms
 - Model tier: Opus (requires Tomasev framework knowledge)
 
-### 2.3 The Tester Agent
+### 2.3 The Tester Agent 🔜
 
 The Tester doesn't evaluate — it verifies. For each issue raised by critics:
 
@@ -191,7 +196,9 @@ The hardest agent to get right. Its job:
 
 ---
 
-## Phase 3: The Learning System
+## Phase 3: The Learning System 🔜
+
+> **Status:** Specified in architecture, not yet implemented. The mechanism below describes the target design.
 
 ### 3.1 Extracting Lessons
 

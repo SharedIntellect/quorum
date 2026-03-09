@@ -75,10 +75,10 @@ quorum run \
    - **Correctness Critic:** No factual errors, but notes the version is 1.0 with no changelog
    - **Security Critic:** Finds `$USER_QUERY` in spawn pattern — CRITICAL injection vector
    - **Completeness Critic:** Finds missing `model` on researcher — CRITICAL gap
-   - **Architecture Critic:** Flags researcher having 6 tools (exec + agent_spawn are high-risk for a read-only role)
-   - **Delegation Critic:** Flags missing `output_contract` on synthesizer; in-memory template passing on validator
+   - **Architecture Critic:** 🔜 *(Planned)* Would flag researcher having 6 tools (exec + agent_spawn are high-risk for a read-only role)
+   - **Delegation Critic:** 🔜 *(Planned)* Would flag missing `output_contract` on synthesizer; in-memory template passing on validator
 
-3. **Tester** verifies:
+3. **Tester** 🔜 *(Planned)* verifies:
    - `grep -n '\$[A-Z]' bad-config.yaml` → confirms line 8 injection
    - Schema parse confirms missing `model` on researcher
    - Schema parse confirms `synthesizer` has no `output_contract`
@@ -188,9 +188,9 @@ Expected result: **PASS** (or PASS_WITH_NOTES on the remaining LOW issues)
 
 1. The **Security Critic** caught a shell injection that would have allowed user input to execute arbitrary commands
 2. The **Completeness Critic** caught a missing model assignment that would have caused non-deterministic behavior
-3. The **Architecture Critic** caught excessive tool permissions that violated least-privilege
-4. The **Delegation Critic** caught in-memory passing that breaks parallelism and determinism
-5. The **Tester** verified every finding with actual tool output — no hand-waving
+3. The **Architecture Critic** 🔜 would catch excessive tool permissions that violated least-privilege
+4. The **Delegation Critic** 🔜 would catch in-memory passing that breaks parallelism and determinism
+5. The **Tester** 🔜 would verify every finding with actual tool output — no hand-waving
 6. The **Fixer** gave you concrete, applicable changes
 
 That's Quorum working as designed.
@@ -202,7 +202,7 @@ That's Quorum working as designed.
 - Try the research synthesis rubric on a LLM-generated report
 - Write a custom rubric for your domain
 - Run at `--depth thorough` for your next production deployment
-- Check `known_issues.json` after a few runs — patterns will start emerging
+- Check `known_issues.json` after a few runs — patterns will start emerging *(learning memory is specified but not yet wired)*
 
 ---
 
