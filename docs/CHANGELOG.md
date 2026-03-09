@@ -32,10 +32,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - All three tools follow the DevSkim pattern: detect if installed, run if available, graceful degradation if not
 - Pre-screen now has 5 layers: built-in regex (PS-001–010) → DevSkim → Ruff → Bandit → PSScriptAnalyzer
 
+#### Crash-Resilient Batch Validation
+- **Progressive manifest**: `batch-manifest.json` updates atomically after each file completes (not just at the end). Tracks `completed_files`, `failed_files`, `status` (running/completed/interrupted)
+- **Resume**: `quorum run --resume <batch-dir>` reads manifest, skips completed files, re-validates crashed entries, only pays for remaining work
+- **Graceful shutdown**: SIGTERM/SIGINT handler saves all in-flight work with `status='interrupted'` before exiting
+- **Progressive report**: `batch-report.md` grows as files complete instead of one big write at the end
+
+#### Cost Tracking and Estimation (Milestone #16)
+- **Per-call tracking**: CostTracker records prompt/completion tokens and USD cost for every LLM call via `litellm.completion_cost()`
+- **Budget cap**: `--max-cost $10` stops gracefully when cumulative cost exceeds threshold — saves all work collected so far
+- **Pre-run estimate**: prints "Estimated cost: $X.XX (Y critic calls across Z files). Proceed? [Y/n]" — auto-skips under $0.50 or with `--yes`
+- **Cost report**: CLI output shows per-file cost breakdown; `run-manifest.json` includes full cost summary
+- Hardcoded rates for Claude, GPT, Gemini, Mistral families; graceful fallback for unknown models
+
+#### CSV Audit Reports (Milestone #17)
+- **`audit-detail.csv`**: one row per file — SHA-256 hash, file size, token estimate, analysis start/end/duration, input/output tokens, tokens/sec, models used, verdict, finding count, cost
+- **`audit-summary.csv`**: single aggregate row — totals, avg/median tokens/sec, cost by model (JSON), pass/fail counts
+- `--audit-report` flag, auto-enabled at `--depth thorough`
+- SHA-256 artifact hashes stored in `run-manifest.json`
+
+### Fixed
+- **PSScriptAnalyzer command injection**: single quotes in file paths now escaped before passing to `pwsh -Command`
+- **Learning memory save resilience**: `save()` wrapped in try/except to prevent crash on write failure
+
 ### Documentation
 - **docs/README.md** — new documentation index with categorized links to all framework docs
+- **docs/SEC02_BUSINESS_LOGIC_VALIDATION.md** — severity calibration table, shared manifest example, Option C success/failure criteria, depth-level mapping (per Devola's review)
 - **SPEC.md** — Security Critic links to SEC-02 workflow; Fixer updated to reflect re-validation loops; learning memory sections updated from "planned" to "shipped"
-- **README.md** — updated to v0.5.3: re-validation loops, learning memory, multi-layer pre-screen, PyPI install, new CLI flags
+- **README.md** — updated to v0.5.3: all new features, CLI flags, cost tracking, audit reports, crash resilience
 
 ### Roadmap Status
 - [x] Re-validation loops (Milestone #5c)
