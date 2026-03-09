@@ -138,6 +138,12 @@ def cli(verbose: bool) -> None:
     default=False,
     help="Skip pre-run cost estimate confirmation prompt.",
 )
+@click.option(
+    "--audit-report",
+    is_flag=True,
+    default=False,
+    help="Generate audit-detail.csv and audit-summary.csv in the run directory. Auto-enabled at --depth thorough.",
+)
 def run_cmd(
     target: str | None,
     pattern: str | None,
@@ -152,6 +158,7 @@ def run_cmd(
     resume: Path | None,
     max_cost: float | None,
     yes: bool,
+    audit_report: bool,
 ) -> None:
     """
     Validate artifacts against a rubric.
@@ -249,6 +256,9 @@ def run_cmd(
             or "?" in target
         )
 
+        # Auto-enable audit report at thorough depth
+        effective_audit = audit_report or (depth == "thorough")
+
         if is_batch:
             files = resolve_targets(target, pattern)
             click.echo(
@@ -271,11 +281,15 @@ def run_cmd(
                 config=quorum_config,
                 runs_dir=output_dir or Path("quorum-runs"),
                 relationships_path=relationships,
+                audit_report=effective_audit,
             )
             # Note: learning memory is not applied per-file in batch mode
 
             print_batch_verdict(batch_verdict, batch_dir=batch_dir, verbose=verbose)
             _print_batch_cost_summary(batch_dir)
+
+            if effective_audit:
+                _print_audit_report_path(batch_dir)
 
             if batch_verdict.is_actionable:
                 sys.exit(2)
@@ -303,6 +317,7 @@ def run_cmd(
                 runs_dir=output_dir or Path("quorum-runs"),
                 relationships_path=relationships,
                 enable_learning=not no_learning,
+                audit_report=effective_audit,
             )
 
             # Show fix loop progress summary if loops ran
@@ -314,6 +329,9 @@ def run_cmd(
 
             print_verdict(verdict, run_dir=run_dir, verbose=verbose)
             _print_run_cost_summary(run_dir)
+
+            if effective_audit:
+                _print_audit_report_path(run_dir)
 
             if verdict.is_actionable:
                 sys.exit(2)
@@ -687,6 +705,13 @@ def _print_batch_cost_summary(batch_dir: Path) -> None:
         _emit_cost_line(cost)
     except Exception:
         pass
+
+
+def _print_audit_report_path(run_dir: Path) -> None:
+    """Print the path to audit-detail.csv if it exists."""
+    detail_path = run_dir / "audit-detail.csv"
+    if detail_path.exists():
+        click.echo(f"Audit report: {detail_path}", err=True)
 
 
 def _emit_cost_line(cost: dict) -> None:

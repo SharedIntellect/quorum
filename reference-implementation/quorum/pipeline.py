@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import glob as glob_mod
+import hashlib
 import json
 import logging
 import signal
@@ -266,6 +267,7 @@ def _update_manifest(
     relationships_path: Path | None,
     learning_stats: dict | None = None,
     cost_summary: dict | None = None,
+    artifact_sha256: str | None = None,
 ) -> None:
     """Update run manifest with final stats."""
     prescreen_stats: dict = {"prescreen_enabled": config.enable_prescreen}
@@ -298,6 +300,8 @@ def _update_manifest(
         manifest_data["learning"] = learning_stats
     if cost_summary:
         manifest_data["cost"] = cost_summary
+    if artifact_sha256:
+        manifest_data["artifact_sha256"] = artifact_sha256
     _write_json(manifest_path, manifest_data)
 
 
@@ -310,6 +314,7 @@ def run_validation(
     relationships_path: Path | None = None,
     enable_learning: bool = True,
     cost_tracker: CostTracker | None = None,
+    audit_report: bool = False,
 ) -> tuple[Verdict, Path]:
     """
     Run a full Quorum validation against a target artifact.
@@ -323,10 +328,12 @@ def run_validation(
         relationships_path: Optional path to quorum-relationships.yaml for Phase 2
                             cross-artifact consistency validation
         enable_learning:    Whether to read/write learning memory (default: True)
+        audit_report:       Generate audit-detail.csv and audit-summary.csv in run_dir
 
     Returns:
         Tuple of (Verdict, run_dir) — the final verdict and the Path to the run output directory
     """
+    run_start = datetime.now(timezone.utc)
     target = Path(target_path)
     if not target.exists():
         raise FileNotFoundError(f"Target artifact not found: {target}")
@@ -339,6 +346,9 @@ def run_validation(
     artifact_text, rubric, run_dir = _load_and_save_inputs(
         target, config, rubric_name, runs_dir, relationships_path,
     )
+
+    # Compute SHA-256 of the artifact before any fix-loop modifications
+    artifact_sha256 = hashlib.sha256(artifact_text.encode("utf-8")).hexdigest()
 
     # Load learning memory and get mandatory context for critics
     learning_memory = None
@@ -574,7 +584,24 @@ def run_validation(
     _update_manifest(
         run_dir, config, prescreen_result, verdict, critic_results,
         relationships_path, learning_stats, cost_summary_dict,
+        artifact_sha256=artifact_sha256,
     )
+
+    run_end = datetime.now(timezone.utc)
+
+    # Generate CSV audit reports if requested
+    if audit_report:
+        try:
+            from quorum.audit import generate_audit_reports
+            generate_audit_reports(
+                run_dir=run_dir,
+                file_path=str(target),
+                cost_tracker=cost_tracker,
+                run_start=run_start,
+                run_end=run_end,
+            )
+        except Exception as e:
+            logger.warning("Audit report generation failed (non-fatal): %s", e)
 
     logger.info(
         "Run complete: verdict=%s | %d findings | run_dir=%s",
@@ -864,6 +891,7 @@ def run_batch_validation(
     config: QuorumConfig | None = None,
     runs_dir: Path | None = None,
     relationships_path: Path | None = None,
+    audit_report: bool = False,
 ) -> tuple[BatchVerdict, Path]:
     """
     Run Quorum validation across multiple files with consolidated results.
@@ -903,6 +931,7 @@ def run_batch_validation(
             config=config,
             runs_dir=runs_dir,
             relationships_path=relationships_path,
+            audit_report=audit_report,
         )
         batch = BatchVerdict(
             status=verdict.status,
@@ -926,7 +955,8 @@ def run_batch_validation(
     batch_dir = base_runs_dir / f"batch-{timestamp}"
     batch_dir.mkdir(parents=True, exist_ok=True)
 
-    batch_started = datetime.now(timezone.utc).isoformat()
+    batch_start_dt = datetime.now(timezone.utc)
+    batch_started = batch_start_dt.isoformat()
 
     # Shared cost tracker for the entire batch — thread-safe, uses thread-local file context
     batch_cost_tracker = CostTracker()
@@ -1106,6 +1136,21 @@ def run_batch_validation(
 
     # Finalize report with aggregate summary section
     _finalize_batch_report(batch_dir / "batch-report.md", batch_verdict, errors)
+
+    # Generate CSV audit reports if requested (only when batch completed without interruption)
+    if audit_report and file_results:
+        try:
+            from quorum.audit import generate_batch_audit_reports
+            batch_end_dt = datetime.now(timezone.utc)
+            generate_batch_audit_reports(
+                batch_dir=batch_dir,
+                file_results=file_results,
+                cost_tracker=batch_cost_tracker,
+                run_start=batch_start_dt,
+                run_end=batch_end_dt,
+            )
+        except Exception as e:
+            logger.warning("Batch audit report generation failed (non-fatal): %s", e)
 
     if _stop_event.is_set():
         logger.warning(
