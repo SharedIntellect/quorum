@@ -247,7 +247,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [x] Parallel critic execution (Milestone #8) ← **DONE**
 - [x] Parallel batch validation (Milestone #8b) ← **DONE**
 - [x] Python code rubric — 25 criteria, auto-detect on .py ← **DONE**
-- [x] Fix loops / Fixer agent (Milestone #5b) ← **DONE** (proposals; re-validation loops future)
+- [ ] Fix loops / Fixer agent (Milestone #5b) ← deferred; proposal mode implemented as NEW in [0.5.1], re-validation loops in [0.5.3]
 - [ ] **Test suite + CI** (Milestone #13) — pytest smoke tests, import checks, GitHub Actions. Credibility gate: no tests = not production-ready. (Grok + GPT 5.4)
 - [ ] **Claim discipline audit** — GPT 5.4 scored 2.5/5 on both README and SPEC. Fix: README ("production-grade"), GitHub org/repo descriptions ("9 critics" + "learning memory"), model table ("not enough" without benchmarks), SPEC §1 framing (nine-agent → target architecture), research citations (Tomasev/ToolMaker = "engineering interpretation of," not "validated by")
 - [ ] **Pre-screen expansion** (Milestone #15) — Wire actual SAST tools: `ruff check` (S1xx+), `bandit`, `PSScriptAnalyzer`. Current 10 regex checks become universal fallback. Frameworks reference 80+ rules from research corpus — integrate them.

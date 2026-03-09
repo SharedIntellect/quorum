@@ -9,7 +9,7 @@
 
 ## 1. Overview
 
-Quorum is a quality assurance framework with a nine-agent target architecture. Currently, 4 critics are implemented (Correctness, Completeness, Security, Code Hygiene), with 5 additional critics planned. The framework is designed to rigorously evaluate multi-agent systems, configurations, research, code, and operational procedures against domain-specific rubrics. It combines:
+Quorum is a quality assurance framework with a nine-agent target architecture. Currently, 5 critics are implemented (Correctness, Completeness, Security, Code Hygiene, and Cross-Artifact Consistency), with 4 additional critics planned. The framework is designed to rigorously evaluate multi-agent systems, configurations, research, code, and operational procedures against domain-specific rubrics. It combines:
 
 - **Parallel specialized critics** (9 agents with distinct expertise)
 - **Grounded evidence requirement** (every critique must cite tool-verified proof)
@@ -100,7 +100,7 @@ High-frequency patterns automatically promote to mandatory checks in future runs
 
 Three execution profiles balance rigor, speed, and cost:
 
-| Depth | Critics (v0.5.1) | Fix Loops | Runtime | Use Case |
+| Depth | Critics | Fix Loops | Runtime | Use Case |
 |-------|---------|-----------|---------|----------|
 | **quick** | Correctness, Completeness | 0 | 5-10 min | Fast feedback; low stakes |
 | **standard** | + Security, Code Hygiene | 0 | 15-30 min | Most work; default |
@@ -416,7 +416,7 @@ Status as of v0.5.0 (reference implementation):
 - [x] Fixer agent — proposal mode + re-validation loops (Phase 1.5; proposes and applies text replacements for CRITICAL/HIGH, then re-runs critics to verify)
 - [x] Python code rubric (25 criteria, PC-001–PC-025, auto-detects on .py files)
 - [x] Learning memory system (known_issues.json frequency tracking + mandatory check promotion — shipped in v0.5.3)
-- [ ] Remaining 5 critics (Architecture, Delegation, Style, Tester, full Fixer)
+- [ ] Remaining 4 critics — Architecture, Delegation, Style, Tester
 - [ ] Trust/monitoring system (per-critic accuracy tracking)
 
 See IMPLEMENTATION.md for a reference walkthrough.
@@ -441,7 +441,7 @@ Quorum is built on these peer-reviewed papers:
 
 ### Current Limitations (v3.0)
 
-- Only **4 of 9 critics are implemented** (Architecture, Delegation, Style, Tester are specified but not built)
+- Only **5 of 9 critics are implemented** (Architecture, Delegation, Style, Tester are specified but not built)
 - Rubric panel is **static** (doesn't specialize per artifact type dynamically)
 - **No critic-to-critic debate** (relies on Aggregator to resolve conflicts)
 - Learning is **frequency-based** only (no semantic deduplication of patterns yet)

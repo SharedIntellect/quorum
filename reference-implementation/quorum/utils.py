@@ -15,8 +15,8 @@ def extract_json_from_response(response_text: str) -> str:
     Extract JSON content from a response that may be wrapped in markdown fences.
 
     This function handles common patterns where LLMs wrap JSON responses in
-    markdown code blocks, which can cause JSON parsing to fail. It uses a more
-    robust approach that handles nested backticks in JSON strings.
+    markdown code blocks, which can cause JSON parsing to fail. It does not
+    handle nested backticks in JSON string values.
 
     Args:
         response_text: Raw response text that may contain fenced JSON
@@ -41,7 +41,7 @@ def extract_json_from_response(response_text: str) -> str:
         return text
 
     # Handle compact fences (no newlines): ```json{"key": "value"}```
-    compact_match = re.match(r'```(?:json|JSON)?\s*(.+?)```$', text, re.DOTALL)
+    compact_match = re.match(r'```(?:json|JSON)?\s*(.+?)```$', text)
     if compact_match and '\n' not in text:
         return compact_match.group(1).strip()
 

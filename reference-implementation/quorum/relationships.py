@@ -59,13 +59,12 @@ class ResolvedRelationship(BaseModel):
     role_b_exists: bool = True
 
 
-def load_manifest(manifest_path: Path, base_dir: Path | None = None) -> list[Relationship]:
+def load_manifest(manifest_path: Path) -> list[Relationship]:
     """
     Load and validate a quorum-relationships.yaml manifest.
 
     Args:
         manifest_path: Path to the YAML manifest
-        base_dir: Base directory for resolving relative paths (defaults to manifest's parent)
 
     Returns:
         List of validated Relationship objects

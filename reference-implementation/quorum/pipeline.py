@@ -233,7 +233,7 @@ def _run_phase2(
 
     # Manifest paths are relative to the manifest's directory, not the target's
     manifest_base = relationships_path.parent.resolve()
-    relationships = load_manifest(relationships_path, base_dir=manifest_base)
+    relationships = load_manifest(relationships_path)
     resolved = resolve_relationships(relationships, base_dir=manifest_base)
 
     # Collect Phase 1 findings (NOT verdicts) as context
@@ -292,7 +292,7 @@ def _update_manifest(
     if cross_result_list and relationships_path is not None:
         try:
             from quorum.relationships import load_manifest
-            rels = load_manifest(relationships_path, base_dir=relationships_path.parent.resolve())
+            rels = load_manifest(relationships_path)
             manifest_data["relationships_count"] = len(rels)
         except Exception:
             pass

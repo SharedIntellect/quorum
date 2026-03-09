@@ -23,12 +23,12 @@ FIXTURES = Path(__file__).parent / "fixtures" / "relationships"
 
 class TestLoadManifest:
     def test_load_valid_manifest(self):
-        rels = load_manifest(FIXTURES / "quorum-relationships.yaml", base_dir=FIXTURES)
+        rels = load_manifest(FIXTURES / "quorum-relationships.yaml")
         assert len(rels) == 2
         assert all(isinstance(r, Relationship) for r in rels)
 
     def test_relationship_types(self):
-        rels = load_manifest(FIXTURES / "quorum-relationships.yaml", base_dir=FIXTURES)
+        rels = load_manifest(FIXTURES / "quorum-relationships.yaml")
         types = {r.type for r in rels}
         assert "documents" in types
         assert "implements" in types
@@ -100,14 +100,14 @@ class TestRelationshipModel:
 
 class TestResolveRelationships:
     def test_resolve_existing_files(self):
-        rels = load_manifest(FIXTURES / "quorum-relationships.yaml", base_dir=FIXTURES)
+        rels = load_manifest(FIXTURES / "quorum-relationships.yaml")
         resolved = resolve_relationships(rels, base_dir=FIXTURES)
         assert len(resolved) == 2
         for r in resolved:
             assert isinstance(r, ResolvedRelationship)
 
     def test_existing_file_content_loaded(self):
-        rels = load_manifest(FIXTURES / "quorum-relationships.yaml", base_dir=FIXTURES)
+        rels = load_manifest(FIXTURES / "quorum-relationships.yaml")
         resolved = resolve_relationships(rels, base_dir=FIXTURES)
         # doc-a.md should be loaded
         docs_rel = next(r for r in resolved if r.relationship.type == "documents")
