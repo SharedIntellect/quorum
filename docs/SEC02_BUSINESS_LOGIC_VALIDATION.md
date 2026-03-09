@@ -2,7 +2,6 @@
 
 **Status:** 🔜 Documented workflow — runtime integration planned  
 **Date:** March 2026  
-**Devola Priority:** #5  
 **Framework Basis:** OWASP ASVS 5.0.0 V2 (Validation and Business Logic), CWE-20, CWE-606
 
 ---
