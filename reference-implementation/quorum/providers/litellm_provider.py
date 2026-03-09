@@ -28,6 +28,7 @@ except ImportError as e:
     ) from e
 
 from quorum.providers.base import BaseProvider
+from quorum.utils import extract_json_from_response
 
 logger = logging.getLogger(__name__)
 
@@ -129,32 +130,29 @@ class LiteLLMProvider(BaseProvider):
         return self._parse_json(raw, model)
 
     def _parse_json(self, raw: str, model: str) -> dict[str, Any]:
-        """Extract and parse JSON from LLM response, handling common formatting issues."""
-        text = raw.strip()
+        """Extract and parse JSON from LLM response, handling markdown fences and other formatting issues."""
+        # Use the utility function to extract clean JSON
+        cleaned_text = extract_json_from_response(raw)
 
-        # Try direct parse first
+        # Try direct parse first (handles both clean and fence-stripped JSON)
         try:
-            return json.loads(text)
+            return json.loads(cleaned_text)
         except json.JSONDecodeError:
             pass
 
-        # Strip markdown code fences if present
-        fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-        if fence_match:
-            try:
-                return json.loads(fence_match.group(1))
-            except json.JSONDecodeError:
-                pass
+        # If that fails, try to find any JSON object or array in the response
+        # Handle both objects {...} and arrays [...]
+        for pattern in [r"\{.*\}", r"\[.*\]"]:
+            match = re.search(pattern, cleaned_text, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    continue
 
-        # Try to find any JSON object in the response
-        obj_match = re.search(r"\{.*\}", text, re.DOTALL)
-        if obj_match:
-            try:
-                return json.loads(obj_match.group(0))
-            except json.JSONDecodeError:
-                pass
-
+        # If all parsing attempts fail, provide detailed error information
         raise ValueError(
             f"Could not parse JSON from model={model} response. "
-            f"First 200 chars: {raw[:200]!r}"
+            f"Original length: {len(raw)}, cleaned length: {len(cleaned_text)}. "
+            f"First 200 chars of cleaned: {cleaned_text[:200]!r}"
         )
