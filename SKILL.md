@@ -1,6 +1,6 @@
 ---
 name: quorum
-description: Multi-agent validation framework (v0.5.1). Deterministic pre-screen + 4 independent AI critics (parallel execution) evaluate artifacts (documents, configs, code, research) against rubrics with evidence-grounded findings. Fixer agent proposes text replacements for CRITICAL/HIGH issues. 3 built-in rubrics (research-synthesis, agent-config, python-code). Supports batch validation and cross-artifact consistency checks.
+description: Multi-agent validation framework — 4 independent AI critics evaluate artifacts against rubrics with evidence-grounded findings.
 metadata: {"openclaw":{"requires":{"bins":["python3","pip"],"env":["ANTHROPIC_API_KEY","OPENAI_API_KEY"]},"install":[{"id":"clone-repo","kind":"shell","command":"git clone https://github.com/SharedIntellect/quorum.git /tmp/quorum-install && cd /tmp/quorum-install/reference-implementation && pip install -r requirements.txt","label":"Clone Quorum repo and install Python dependencies"}],"source":"https://github.com/SharedIntellect/quorum"}}
 ---
 
