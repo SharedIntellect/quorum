@@ -81,10 +81,12 @@ LLM-only findings are still grounded in framework citations (OWASP ASVS, CWE, SA
 
 ## Improvement Roadmap
 
-1. **Custom PSScriptAnalyzer rules** — Write custom PSSA rules for the highest-impact gaps (SQL injection, path traversal, timeout enforcement)
-2. **Semgrep PowerShell support** — Monitor Semgrep's PowerShell parser development; integrate when available
+1. **Microsoft DevSkim integration** — MIT-licensed, CLI-invokable (`devskim analyze`), SARIF/JSON output. Adds ~15 cross-language security patterns (dangerous functions, hardcoded URLs, credential patterns). Complementary to PSSA, low integration effort.
+2. **Custom PSScriptAnalyzer rules** — Write ~10-15 custom PSSA rules for the highest-impact gaps (SQL injection via `Invoke-Sqlcmd`, path traversal in `Get-Content`, `Start-Process` with unsanitized input). PSSA supports custom rules in PowerShell or compiled C# — this is the highest-leverage improvement.
 3. **Pre-screen expansion** — Add regex-based deterministic checks for PowerShell patterns that don't need full PSSA (e.g., `Invoke-Sqlcmd` + string concatenation)
 4. **Community contribution** — Contribute security rules upstream to PSScriptAnalyzer
+
+**Not on the horizon:** Semgrep and CodeQL have both confirmed PowerShell is not on their roadmaps (as of early 2026). No maintained community security rule packs for PSSA exist. The gap is structural — no major SAST engine has built a PowerShell AST parser outside of PSSA's .NET implementation.
 
 ---
 
