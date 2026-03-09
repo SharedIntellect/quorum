@@ -106,7 +106,7 @@ Three execution profiles balance rigor, speed, and cost:
 | **standard** | + Security, Code Hygiene | 0 | 15-30 min | Most work; default |
 | **thorough** | All shipped critics | 1 (proposal mode) | 30-60 min | Critical decisions; production |
 
-Pre-screen (10 deterministic checks, §3.1) runs before LLM critics at all depth levels. Fix loops are implemented (Phase 1.5 — proposal mode). The Fixer proposes text replacements for CRITICAL/HIGH findings when max_fix_loops > 0; re-validation loops (apply → re-run) are deferred. Full 9-critic panels are the roadmap target for thorough depth.
+Pre-screen (10 built-in checks + optional DevSkim SAST, §3.1) runs before LLM critics at all depth levels. Fix loops are implemented (Phase 1.5 — proposal mode). The Fixer proposes text replacements for CRITICAL/HIGH findings when max_fix_loops > 0; re-validation loops (apply → re-run) are deferred. Full 9-critic panels are the roadmap target for thorough depth.
 
 ### 2.6 Transparency Over Convenience
 
@@ -126,7 +126,9 @@ Concrete consequences:
 
 ### 3.1 Pre-Screen Layer *(implemented)*
 
-Before any LLM critic runs, Quorum executes 10 fast deterministic checks against the target artifact. These checks are rule-based, produce no API costs, and complete in milliseconds.
+Before any LLM critic runs, Quorum executes a two-pass deterministic pre-screen against the target artifact.
+
+**Pass 1: Built-in checks** — 10 rule-based regex/parse checks. No API costs, completes in milliseconds.
 
 | Check ID | What It Catches |
 |----------|----------------|
@@ -140,6 +142,8 @@ Before any LLM critic runs, Quorum executes 10 fast deterministic checks against
 | PS-008 | TODO/FIXME/HACK markers |
 | PS-009 | Trailing whitespace and mixed line endings |
 | PS-010 | Empty file or effectively-empty file |
+
+**Pass 2: DevSkim SAST** — When [DevSkim](https://github.com/microsoft/DevSkim) is installed, Quorum runs it as a second linter pass. DevSkim catches security patterns that regex checks miss (weak crypto, insecure defaults, known-vulnerable API usage). Results are merged into the same pre-screen evidence block. DevSkim is optional — if not installed, Pass 1 runs alone with no degradation.
 
 Pre-screen results are written to `prescreen.json` in the run directory. If any check has severity `CRITICAL` or `HIGH`, the artifact may be rejected before LLM critics are invoked, depending on depth profile. Pre-screen findings are passed as context to Phase 1 critics.
 
@@ -242,7 +246,7 @@ relationships:
 ### 3.5 The Workflow
 
 1. **Intake** — Supervisor receives the artifact (config, research, code), target rubric, and optional relationships manifest
-2. **Pre-Screen** — 10 deterministic checks run (§3.1); results written to `prescreen.json`
+2. **Pre-Screen** — built-in checks + DevSkim SAST run (§3.1); results written to `prescreen.json`
 3. **Phase 1 Dispatch** — Supervisor provides each critic with:
    - The artifact excerpt relevant to their domain
    - The rubric criteria they must evaluate
@@ -398,7 +402,7 @@ Status as of v0.5.0 (reference implementation):
 
 - [x] LLM provider — LiteLLM universal provider (100+ models, any tier combination)
 - [x] File-based artifact passing (no in-memory state between agents)
-- [x] Pre-screen layer — 10 deterministic checks (PS-001–PS-010)
+- [x] Pre-screen layer — 10 built-in checks (PS-001–PS-010) + DevSkim SAST integration
 - [x] 4 critics implemented — Correctness, Completeness, Security, Code Hygiene
 - [x] Cross-Artifact Consistency critic (Phase 2, relationships manifest)
 - [x] Rubric system (JSON schema + validator, 3 built-in rubrics: research-synthesis, agent-config, python-code)

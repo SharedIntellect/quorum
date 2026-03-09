@@ -4,6 +4,67 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.2] — 2026-03-08
+
+### Added
+
+#### DevSkim Pre-Screen Integration
+- **New SAST pass: DevSkim** — second security linter alongside the existing 10 deterministic pre-screen checks (~690 lines)
+- Catches patterns that regex-based PS-002 misses; runs as part of the pre-screen phase before LLM critics
+- Pre-screen layer now has two passes: deterministic rules (PS-001–PS-010) + DevSkim SAST
+
+#### Structured Output Enforcement
+- **New utility: `extract_json_from_response()`** — strips markdown fence wrappers (` ```json `) from critic JSON responses before parsing
+- **25 tests** covering fence-wrapped, bare JSON, and malformed inputs
+- Prevents critic JSON parse failures when LLM wraps output in markdown blocks
+
+#### threat_context Relationship Type
+- **New relationship type: `threat_context`** for `quorum-relationships.yaml` — surfaces threat model context to the SEC-04 (Authorization) critic
+- Enables cross-artifact authorization review with declared threat scope
+
+#### Test Suite + CI Pipeline
+- **560 tests passing** via pytest — expanded from 524 (0.5.1) to 560 with new structured output tests
+- **GitHub Actions CI** — automated on push/PR; `setup-python@v5`, `codecov@v4`
+
+#### Implementation Status Markers
+- **`✅ Shipped` / `🔜 Planned` markers** added across framework docs
+- Distinguishes shipped capability from roadmap intent at a glance
+
+### Documentation
+
+- **SEC-02 business logic validation workflow** — documents the requirements→critic path for business logic review
+- **PowerShell coverage assessment** — honest ~70% coverage disclosure; DevSkim finding documented; confirmed SAST landscape gaps noted
+- **PEP framework grounding for Python code rubric** — PC-001–PC-025 criteria now cite PEP 8, PEP 20, PEP 257, PEP 484, PEP 526
+- **CODE_HYGIENE_FRAMEWORK.md** — added to public repo
+
+### Fixed
+
+- **Claim discipline audit** — README and SPEC overclaiming corrected; 5 line-level issues resolved; internal docs removed from public repo
+- **Internal reference leaks** — removed internal boundary instructions from public SKILL.md and internal references from public repo
+- **arXiv citation corrected** — "Council as Judge" → "Replacing Judges with Juries" (Verga et al., 2024)
+- **Broken links** — fixed broken links and removed domain-specific roadmap from public repo
+- **CI action versions** — bumped `setup-python` to v5, `codecov` to v4
+- **Email addresses** — replaced personal emails with `@sharedintellect.com` in `pyproject.toml`
+- **Version string sync** — `pyproject.toml` and `__init__.py` aligned to 0.5.1 before this release
+
+### Roadmap Status
+- [x] Test suite + CI — 560 tests, GitHub Actions
+- [x] Claim discipline audit — completed
+- [x] Python rubric framework grounding — PEP citations added
+- [x] Pre-screen expansion (Phase 1) — DevSkim integrated
+- [ ] Re-validation loops — apply Fixer proposals → re-run critics → verify (Milestone #5c)
+- [ ] Architecture critic (Milestone #9)
+- [ ] Tester critic (Milestone #10)
+- [ ] Confidence calibration (Milestone #6b)
+- [ ] **Learning memory** (Milestone #7) — wire up known_issues.json frequency tracking + mandatory check promotion
+- [ ] **PyPI publish** (Milestone #14) — `pip install quorum-ai` instead of clone + install
+- [ ] Delegation critic (Milestone #11)
+- [ ] Style critic (Milestone #12)
+- [ ] Documentation headers adoption (Phase 1–4)
+- [ ] Self-validation graduation (GRAD)
+
+---
+
 ## [0.5.1] — 2026-03-06
 
 ### Added — Parallel Execution, Python Code Rubric, Fixer Agent
