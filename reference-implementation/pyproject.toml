@@ -7,8 +7,8 @@ name = "quorum-validator"
 version = "0.5.1"
 description = "Multi-critic quality validation for agents, research, and configurations"
 authors = [
-    {name = "Daniel Cervera", email = "daniel.sirvera@gmail.com"},
-    {name = "Akkari", email = "akkari.nova.ai@gmail.com"},
+    {name = "Daniel Cervera", email = "daniel@sharedintellect.com"},
+    {name = "Akkari", email = "akkari@sharedintellect.com"},
 ]
 readme = "README.md"
 license = {text = "MIT"}
