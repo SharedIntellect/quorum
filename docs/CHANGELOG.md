@@ -42,12 +42,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [x] Learning memory (Milestone #7)
 - [x] Pre-screen expansion — Ruff, Bandit, PSScriptAnalyzer (Milestone #15)
 - [x] PyPI publish (Milestone #14) — `pip install quorum-validator`
+- [x] **Cost tracking and estimation** (Milestone #16) — per-call token counts via LiteLLM, cumulative run cost in manifest, pre-run estimate, `--max-cost` budget cap, cost report in CLI output
+- [x] **CSV audit reports** (Milestone #17) — per-file SHA-256, timing, token counts, cost breakdown; aggregate summary with median tokens/sec and cost-by-model
+- [x] **Crash-resilient batch validation** — progressive manifest saves, `--resume`, graceful SIGTERM/SIGINT shutdown
 - [ ] Architecture critic (Milestone #9)
 - [ ] Tester critic (Milestone #10)
 - [ ] Confidence calibration (Milestone #6b)
 - [ ] Delegation critic (Milestone #11)
 - [ ] Style critic (Milestone #12)
 - [ ] Self-validation graduation (GRAD)
+- [ ] **Hardware-backed result protection** (Milestone #18) — YubiKey KEK wrapping per-run DEKs, encrypted-at-rest validation results, HMAC tamper evidence over run manifests. For sensitive security assessments where findings themselves are high-value targets. CKMS-aligned (SP 800-130/152 principles applied to the validation pipeline)
 
 ---
 

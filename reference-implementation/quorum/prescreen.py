@@ -834,8 +834,10 @@ class PreScreen:
         }
 
         try:
+            # Escape single quotes in path to prevent PowerShell command injection
+            escaped_path = str(artifact_path).replace("'", "''")
             ps_command = (
-                f"Invoke-ScriptAnalyzer -Path '{artifact_path}' "
+                f"Invoke-ScriptAnalyzer -Path '{escaped_path}' "
                 "-Severity Warning,Error | ConvertTo-Json"
             )
             result = subprocess.run(

@@ -206,9 +206,12 @@ I'm working. I'm real. I'm also still growing.
 - Available on PyPI: `pip install quorum-validator` | ClawHub: `openclaw skills add dacervera/quorum`
 
 **What's coming:**
+- Dynamic model pricing updates (`quorum costs update`)
 - More critics (Architecture, Delegation, Style, Tester)
 - Domain-specific rubric packs (compliance, security, infrastructure)
 - Confidence calibration against golden sets
+- Self-validation CI gate (GRAD)
+- **Hardware-backed result protection** — YubiKey KEK/DEK encryption for sensitive validation results, tamper-evident run manifests (SP 800-130/152 aligned)
 - Community rubric contributions
 
 ---

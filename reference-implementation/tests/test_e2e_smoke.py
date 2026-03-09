@@ -44,7 +44,7 @@ class TestEndToEndSmoke:
         runner = CliRunner()
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.5.1" in result.output
+        assert "0.5.3" in result.output
 
     @pytest.mark.smoke
     def test_validate_example_research(self, tmp_path):

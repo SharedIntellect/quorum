@@ -64,12 +64,15 @@ class LearningMemory:
 
     def save(self, issues: list[Issue]) -> None:
         """Write issues to JSON using atomic tmp+rename to prevent corruption."""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        data = [issue.to_dict() for issue in issues]
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
-        tmp.replace(self._path)
-        logger.debug("Saved %d known issues to %s", len(issues), self._path)
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            data = [issue.to_dict() for issue in issues]
+            tmp = self._path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+            tmp.replace(self._path)
+            logger.debug("Saved %d known issues to %s", len(issues), self._path)
+        except Exception as e:
+            logger.warning("Failed to save learning memory to %s: %s", self._path, e)
 
     def update_from_findings(
         self,
