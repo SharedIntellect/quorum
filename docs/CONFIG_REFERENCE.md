@@ -4,8 +4,8 @@
 
 ## Depth Profiles
 
-| Profile | Critics | Fix Rounds | Time | Use Case |
-|---------|---------|------------|------|----------|
+| Profile | Critics | Fix Rounds | Time | Use Case | Status |
+|---------|---------|------------|------|----------|--------|
 | **quick** | Shipped critics (currently 4) | 0 | 5–15 min | Iteration, drafts | ✅ Shipped |
 | **standard** | Shipped critics + fixer | 1 on CRITICAL | 15–30 min | Pre-merge, reviews | ✅ Shipped |
 | **thorough** | All shipped critics + fixer | ≤2 on CRITICAL/HIGH | 30–60 min | Critical decisions, production | ✅ Shipped |

@@ -296,9 +296,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [1.0.0] — 2026-02-22
+## [1.0.0] — Target Release (Not Yet Shipped)
 
-### Added
+> **Status:** This entry describes the planned full-release architecture. None of the features below are yet implemented. See the Roadmap sections in recent releases for current status.
+
+### Planned
 - **9-agent parallel validation architecture** — Correctness, Architecture, Security, Delegation, Completeness, and Style critics, plus Tester, Fixer, and Aggregator
 - **Evidence mandate** — every critique requires tool-verified evidence (schema parsing, web search, grep, exec output)
 - **Rubric system** — JSON-based rubrics with weighted criteria, evidence types, and severity levels
@@ -312,8 +314,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Tutorial** — step-by-step walkthrough validating a deliberately broken agent configuration
 - **Brand assets** — logo, social previews, README banners (light/dark/transparent)
 
-### External Validation
-- Independently evaluated by Grok 4.20 at **9.2–9.5/10** (elite tier)
+### Notes
+- External evaluation claim ("Grok 4.20 at 9.2–9.5/10") referenced a non-existent model version; removed until verifiable.
 
 ## Roadmap
 

@@ -647,7 +647,7 @@ class PreScreen:
             findings = []
 
             for run in sarif_data.get("runs", []):
-                rules = {rule["id"]: rule for rule in run.get("tool", {}).get("driver", {}).get("rules", [])}
+                rules = {rule.get("id", ""): rule for rule in run.get("tool", {}).get("driver", {}).get("rules", []) if rule.get("id")}
 
                 for sarif_result in run.get("results", []):
                     rule_id = sarif_result.get("ruleId", "")
