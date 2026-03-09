@@ -56,9 +56,20 @@ def cli(verbose: bool) -> None:
 @cli.command("run")
 @click.option(
     "--target", "-t",
-    required=True,
+    required=False,
+    default=None,
     type=str,
     help="File, directory, or glob pattern to validate",
+)
+@click.option(
+    "--resume",
+    default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help=(
+        "Resume an interrupted batch run from its directory "
+        "(e.g. ./quorum-runs/batch-20260309-023000). "
+        "Mutually exclusive with --target."
+    ),
 )
 @click.option(
     "--pattern", "-p",
@@ -115,7 +126,7 @@ def cli(verbose: bool) -> None:
     help="Disable learning memory for this run (do not read or write known_issues.json)",
 )
 def run_cmd(
-    target: str,
+    target: str | None,
     pattern: str | None,
     depth: str,
     rubric: str | None,
@@ -125,6 +136,7 @@ def run_cmd(
     fix_loops: int | None,
     verbose: bool,
     no_learning: bool,
+    resume: Path | None,
 ) -> None:
     """
     Validate artifacts against a rubric.
@@ -142,8 +154,18 @@ def run_cmd(
       quorum run --target ./pipeline/ --rubric agent-config --depth thorough
 
       quorum run --target policy.md --rubric ./rubrics/rfc3647.json
+
+      quorum run --resume ./quorum-runs/batch-20260309-023000
     """
     from quorum.output import print_verdict, print_batch_verdict, print_error, print_warning
+
+    # Validate mutual exclusivity
+    if resume is not None and target is not None:
+        print_error("--resume and --target are mutually exclusive.")
+        sys.exit(1)
+    if resume is None and target is None:
+        print_error("Provide --target <path> to start a new run, or --resume <batch-dir> to continue an interrupted one.")
+        sys.exit(1)
 
     # Check for API keys before doing any work
     if not _has_api_key():
@@ -157,8 +179,38 @@ def run_cmd(
 
     try:
         from quorum.config import load_config, QuorumConfig
-        from quorum.pipeline import resolve_targets, run_validation, run_batch_validation
+        from quorum.pipeline import resolve_targets, run_validation, run_batch_validation, resume_batch_validation
 
+        # ── Resume mode ──────────────────────────────────────────────────────
+        if resume is not None:
+            import json as _json
+            manifest_path = resume / "batch-manifest.json"
+            try:
+                manifest = _json.loads(manifest_path.read_text())
+            except FileNotFoundError:
+                print_error(f"No batch-manifest.json found in: {resume}")
+                sys.exit(1)
+            except _json.JSONDecodeError as e:
+                print_error(f"Corrupted batch-manifest.json: {e}")
+                sys.exit(1)
+
+            completed = len(manifest.get("completed_files", []))
+            total = manifest.get("total_files", "?")
+            remaining = (total - completed) if isinstance(total, int) else "?"
+            click.echo(
+                f"Resuming batch from {resume}  "
+                f"({completed} already done, {remaining} remaining) ...",
+                err=True,
+            )
+
+            batch_verdict, batch_dir = resume_batch_validation(batch_dir=resume)
+            print_batch_verdict(batch_verdict, batch_dir=batch_dir, verbose=verbose)
+
+            if batch_verdict.is_actionable:
+                sys.exit(2)
+            return
+
+        # ── Normal run mode ──────────────────────────────────────────────────
         # Load config
         if config:
             quorum_config = QuorumConfig.from_yaml(config)

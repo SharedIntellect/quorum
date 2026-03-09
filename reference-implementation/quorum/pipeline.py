@@ -18,6 +18,8 @@ import asyncio
 import glob as glob_mod
 import json
 import logging
+import signal
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -628,6 +630,26 @@ def _write_json(path: Path, data: dict) -> None:
         raise
 
 
+def _write_json_atomic(path: Path, data: dict) -> None:
+    """Atomically write a dict to a JSON file using a .tmp sibling and rename.
+
+    Prevents partial/corrupt JSON on disk if the process crashes mid-write.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(".tmp")
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, default=str)
+        tmp_path.replace(path)
+    except (OSError, UnicodeEncodeError) as e:
+        logger.error("Failed to atomically write %s: %s", path, e)
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Batch / multi-file validation
 # ──────────────────────────────────────────────────────────────────────────────
@@ -814,6 +836,10 @@ def run_batch_validation(
     """
     Run Quorum validation across multiple files with consolidated results.
 
+    Writes batch-manifest.json progressively after each file completes so that
+    a crash or SIGINT/SIGTERM does not lose completed work. Use
+    resume_batch_validation(batch_dir) to continue an interrupted run.
+
     Args:
         target:             File, directory, or glob pattern
         pattern:            Optional glob filter for directories (e.g. "*.md")
@@ -868,34 +894,137 @@ def run_batch_validation(
     batch_dir = base_runs_dir / f"batch-{timestamp}"
     batch_dir.mkdir(parents=True, exist_ok=True)
 
-    file_results: list[FileResult] = []
-    errors: list[dict] = []
     batch_started = datetime.now(timezone.utc).isoformat()
 
-    max_workers = min(len(files), MAX_BATCH_WORKERS)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(
-                _validate_one_file,
-                file_path, i, len(files),
-                depth, rubric_name, config,
-                batch_dir / "per-file", relationships_path,
-            ): file_path
-            for i, file_path in enumerate(files, 1)
-        }
-        for future in as_completed(futures, timeout=3600):  # 1 hour max for entire batch
-            result = future.result()
-            if isinstance(result, FileResult):
-                file_results.append(result)
-            else:
-                errors.append(result)
+    # Write initial manifest immediately so a crash after this point is resumable
+    _write_json_atomic(batch_dir / "batch-manifest.json", {
+        "target": str(target),
+        "pattern": pattern,
+        "depth": depth,
+        "rubric": rubric_name,
+        "total_files": len(files),
+        "validated": 0,
+        "errors": 0,
+        "started_at": batch_started,
+        "status": "running",
+        "completed_files": [],
+        "failed_files": [],
+    })
+
+    # Write initial batch report header
+    _init_batch_report(batch_dir / "batch-report.md", target)
+
+    # Signal handling — graceful shutdown on SIGTERM/SIGINT
+    _stop_event = threading.Event()
+    _old_sigterm: object = None
+    _old_sigint: object = None
+    _signals_registered = False
+
+    def _handle_signal(signum: int, frame: object) -> None:
+        logger.warning(
+            "Signal %d received — stopping batch after in-flight tasks complete", signum
+        )
+        _stop_event.set()
+
+    try:
+        _old_sigterm = signal.signal(signal.SIGTERM, _handle_signal)
+        _old_sigint = signal.signal(signal.SIGINT, _handle_signal)
+        _signals_registered = True
+    except ValueError:
+        # signal.signal() raises ValueError when called outside the main thread
+        logger.debug("Signal handlers not registered (not in main thread)")
+
+    file_results: list[FileResult] = []
+    errors: list[dict] = []
+    completed_files: list[dict] = []
+    failed_files: list[dict] = []
+    _manifest_lock = threading.Lock()
+    _report_lock = threading.Lock()
+
+    try:
+        max_workers = min(len(files), MAX_BATCH_WORKERS)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    _validate_one_file,
+                    file_path, i, len(files),
+                    depth, rubric_name, config,
+                    batch_dir / "per-file", relationships_path,
+                ): file_path
+                for i, file_path in enumerate(files, 1)
+            }
+            for future in as_completed(futures, timeout=3600):  # 1 hour max
+                result = future.result()
+                file_path = futures[future]
+
+                with _manifest_lock:
+                    if isinstance(result, FileResult):
+                        file_results.append(result)
+                        completed_files.append({
+                            "file": str(file_path),
+                            "run_dir": result.run_dir,
+                            "verdict": result.verdict.status.value,
+                            "completed_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                    else:
+                        errors.append(result)
+                        failed_files.append({
+                            "file": str(file_path),
+                            "error": result.get("error", "unknown"),
+                            "failed_at": datetime.now(timezone.utc).isoformat(),
+                        })
+
+                    # Progressive manifest update — atomic so crash leaves valid JSON
+                    _write_json_atomic(batch_dir / "batch-manifest.json", {
+                        "target": str(target),
+                        "pattern": pattern,
+                        "depth": depth,
+                        "rubric": rubric_name,
+                        "total_files": len(files),
+                        "validated": len(file_results),
+                        "errors": len(errors),
+                        "started_at": batch_started,
+                        "last_updated_at": datetime.now(timezone.utc).isoformat(),
+                        "status": "running",
+                        "completed_files": completed_files,
+                        "failed_files": failed_files,
+                    })
+
+                # Append this file's result to the live batch report
+                if isinstance(result, FileResult):
+                    with _report_lock:
+                        _append_file_to_batch_report(batch_dir / "batch-report.md", result)
+
+                # Check stop flag — cancel queued (not in-flight) futures, then exit loop
+                if _stop_event.is_set():
+                    logger.warning(
+                        "Batch interrupted — cancelling queued futures, "
+                        "waiting for in-flight tasks"
+                    )
+                    for f in futures:
+                        f.cancel()
+                    break
+
+    except TimeoutError:
+        logger.error("Batch validation timed out after 1 hour")
+
+    finally:
+        # Restore original signal handlers
+        if _signals_registered:
+            try:
+                signal.signal(signal.SIGTERM, _old_sigterm)
+                signal.signal(signal.SIGINT, _old_sigint)
+            except (ValueError, OSError):
+                pass
+
+    # Determine final status
+    final_status = "interrupted" if _stop_event.is_set() else "completed"
 
     # Compute aggregate verdict
     batch_verdict = _aggregate_batch(file_results, errors)
 
-    # Write batch outputs
-    # Batch manifest (multi-file validation metadata — differs from run-manifest.json per-file format)
-    _write_json(batch_dir / "batch-manifest.json", {
+    # Final manifest update
+    _write_json_atomic(batch_dir / "batch-manifest.json", {
         "target": str(target),
         "pattern": pattern,
         "depth": depth,
@@ -904,6 +1033,10 @@ def run_batch_validation(
         "validated": len(file_results),
         "errors": len(errors),
         "started_at": batch_started,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "status": final_status,
+        "completed_files": completed_files,
+        "failed_files": failed_files,
     })
 
     _write_json(batch_dir / "batch-verdict.json", batch_verdict.model_dump())
@@ -911,13 +1044,255 @@ def run_batch_validation(
     if errors:
         _write_json(batch_dir / "errors.json", errors)
 
-    _write_batch_report(batch_dir / "batch-report.md", batch_verdict, target, errors)
+    # Finalize report with aggregate summary section
+    _finalize_batch_report(batch_dir / "batch-report.md", batch_verdict, errors)
+
+    if _stop_event.is_set():
+        logger.warning(
+            "Batch interrupted: %d/%d files completed | %s",
+            len(file_results), len(files), batch_dir,
+        )
+    else:
+        logger.info(
+            "Batch complete: %s | %d/%d files | %d total findings | %s",
+            batch_verdict.status.value,
+            len(file_results),
+            len(files),
+            batch_verdict.total_findings,
+            batch_dir,
+        )
+
+    return batch_verdict, batch_dir
+
+
+def resume_batch_validation(
+    batch_dir: Path,
+    runs_dir: Path | None = None,
+) -> tuple[BatchVerdict, Path]:
+    """
+    Resume an interrupted or partial batch validation run.
+
+    Reads batch-manifest.json from *batch_dir* to discover which files already
+    completed, resolves the original target to get the full file list, skips
+    completed files, and validates the remainder using the same config.
+
+    Per-file run_dirs that exist on disk but are NOT in the manifest's
+    completed_files list are treated as crashed mid-validation and will be
+    re-validated.
+
+    Args:
+        batch_dir: Path to an existing batch run directory (must contain
+                   batch-manifest.json).
+        runs_dir:  Ignored — per-file outputs are written under *batch_dir* to
+                   keep the batch self-contained.
+
+    Returns:
+        (BatchVerdict, batch_dir) — updated consolidated verdict and the same dir.
+
+    Raises:
+        FileNotFoundError: If batch_dir or batch-manifest.json does not exist.
+        ValueError: If the manifest is malformed or already completed.
+    """
+    manifest_path = batch_dir / "batch-manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(
+            f"No batch-manifest.json found in: {batch_dir}"
+        )
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Corrupted batch-manifest.json in {batch_dir}: {e}") from e
+
+    target = manifest.get("target")
+    pattern = manifest.get("pattern")
+    depth = manifest.get("depth", "quick")
+    rubric_name = manifest.get("rubric")
+    batch_started = manifest.get("started_at", datetime.now(timezone.utc).isoformat())
+
+    if not target:
+        raise ValueError(f"batch-manifest.json missing 'target' field in {batch_dir}")
+
+    # Build set of already-completed file paths
+    completed_entries: list[dict] = manifest.get("completed_files", [])
+    completed_file_paths: set[str] = {e["file"] for e in completed_entries}
+    failed_entries: list[dict] = manifest.get("failed_files", [])
+
+    # Resolve full file list from the original target
+    all_files = resolve_targets(target, pattern)
+    remaining_files = [f for f in all_files if str(f) not in completed_file_paths]
+
+    already_done = len(completed_file_paths)
+    logger.info(
+        "Resume: %d/%d files already completed, %d remaining",
+        already_done, len(all_files), len(remaining_files),
+    )
+
+    # Reconstruct FileResult objects for already-completed files
+    existing_results: list[FileResult] = []
+    for entry in completed_entries:
+        run_dir_path = Path(entry["run_dir"])
+        verdict_path = run_dir_path / "verdict.json"
+        try:
+            verdict_data = json.loads(verdict_path.read_text(encoding="utf-8"))
+            from quorum.models import Verdict as _Verdict
+            verdict_obj = _Verdict.model_validate(verdict_data)
+            existing_results.append(FileResult(
+                file_path=entry["file"],
+                verdict=verdict_obj,
+                run_dir=entry["run_dir"],
+            ))
+        except Exception as e:
+            logger.warning(
+                "Could not reconstruct result for %s from %s: %s — re-validating",
+                entry["file"], run_dir_path, e,
+            )
+            # Treat this file as remaining so it gets re-validated
+            remaining_files.append(Path(entry["file"]))
+            completed_file_paths.discard(entry["file"])
+
+    # Update manifest to 'running' before we start new work
+    completed_files: list[dict] = [e for e in completed_entries
+                                   if e["file"] in completed_file_paths]
+    errors: list[dict] = []
+    _manifest_lock = threading.Lock()
+    _report_lock = threading.Lock()
+
+    _write_json_atomic(batch_dir / "batch-manifest.json", {
+        "target": str(target),
+        "pattern": pattern,
+        "depth": depth,
+        "rubric": rubric_name,
+        "total_files": len(all_files),
+        "validated": len(existing_results),
+        "errors": 0,
+        "started_at": batch_started,
+        "resumed_at": datetime.now(timezone.utc).isoformat(),
+        "last_updated_at": datetime.now(timezone.utc).isoformat(),
+        "status": "running",
+        "completed_files": completed_files,
+        "failed_files": failed_entries,
+    })
+
+    new_results: list[FileResult] = []
+
+    if remaining_files:
+        # Signal handling for resume too
+        _stop_event = threading.Event()
+        _old_sigterm: object = None
+        _old_sigint: object = None
+        _signals_registered = False
+
+        def _handle_signal(signum: int, frame: object) -> None:
+            logger.warning(
+                "Signal %d received — stopping resumed batch after in-flight tasks", signum
+            )
+            _stop_event.set()
+
+        try:
+            _old_sigterm = signal.signal(signal.SIGTERM, _handle_signal)
+            _old_sigint = signal.signal(signal.SIGINT, _handle_signal)
+            _signals_registered = True
+        except ValueError:
+            logger.debug("Signal handlers not registered (not in main thread)")
+
+        try:
+            max_workers = min(len(remaining_files), MAX_BATCH_WORKERS)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(
+                        _validate_one_file,
+                        file_path, i + already_done, len(all_files),
+                        depth, rubric_name, None,
+                        batch_dir / "per-file", None,
+                    ): file_path
+                    for i, file_path in enumerate(remaining_files, 1)
+                }
+                for future in as_completed(futures, timeout=3600):
+                    result = future.result()
+                    file_path = futures[future]
+
+                    with _manifest_lock:
+                        if isinstance(result, FileResult):
+                            new_results.append(result)
+                            completed_files.append({
+                                "file": str(file_path),
+                                "run_dir": result.run_dir,
+                                "verdict": result.verdict.status.value,
+                                "completed_at": datetime.now(timezone.utc).isoformat(),
+                            })
+                        else:
+                            errors.append(result)
+
+                        _write_json_atomic(batch_dir / "batch-manifest.json", {
+                            "target": str(target),
+                            "pattern": pattern,
+                            "depth": depth,
+                            "rubric": rubric_name,
+                            "total_files": len(all_files),
+                            "validated": len(existing_results) + len(new_results),
+                            "errors": len(errors),
+                            "started_at": batch_started,
+                            "last_updated_at": datetime.now(timezone.utc).isoformat(),
+                            "status": "running",
+                            "completed_files": completed_files,
+                            "failed_files": failed_entries,
+                        })
+
+                    if isinstance(result, FileResult):
+                        with _report_lock:
+                            _append_file_to_batch_report(
+                                batch_dir / "batch-report.md", result
+                            )
+
+                    if _stop_event.is_set():
+                        for f in futures:
+                            f.cancel()
+                        break
+
+        finally:
+            if _signals_registered:
+                try:
+                    signal.signal(signal.SIGTERM, _old_sigterm)
+                    signal.signal(signal.SIGINT, _old_sigint)
+                except (ValueError, OSError):
+                    pass
+
+        final_status = "interrupted" if _stop_event.is_set() else "completed"
+    else:
+        final_status = "completed"
+
+    all_results = existing_results + new_results
+    batch_verdict = _aggregate_batch(all_results, errors)
+
+    _write_json_atomic(batch_dir / "batch-manifest.json", {
+        "target": str(target),
+        "pattern": pattern,
+        "depth": depth,
+        "rubric": rubric_name,
+        "total_files": len(all_files),
+        "validated": len(all_results),
+        "errors": len(errors),
+        "started_at": batch_started,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "status": final_status,
+        "completed_files": completed_files,
+        "failed_files": failed_entries,
+    })
+
+    _write_json(batch_dir / "batch-verdict.json", batch_verdict.model_dump())
+
+    if errors:
+        _write_json(batch_dir / "errors.json", errors)
+
+    _finalize_batch_report(batch_dir / "batch-report.md", batch_verdict, errors)
 
     logger.info(
-        "Batch complete: %s | %d/%d files | %d total findings | %s",
+        "Resume %s: %s | %d/%d files | %d total findings | %s",
+        final_status,
         batch_verdict.status.value,
-        len(file_results),
-        len(files),
+        len(all_results),
+        len(all_files),
         batch_verdict.total_findings,
         batch_dir,
     )
@@ -980,19 +1355,46 @@ def _aggregate_batch(
     )
 
 
-def _write_batch_report(
-    path: Path,
-    batch: BatchVerdict,
-    target: str | Path,
-    errors: list[dict],
-) -> None:
-    """Write a consolidated Markdown batch report."""
+def _init_batch_report(path: Path, target: str | Path) -> None:
+    """Create batch-report.md with a header and per-file table header."""
     lines = [
         "# Quorum Batch Validation Report",
         "",
         f"**Target:** `{target}`  ",
         f"**Date:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')} UTC  ",
-        f"**Files:** {batch.total_files}  ",
+        "",
+        "---",
+        "",
+        "## Per-File Summary",
+        "",
+        "| File | Status | Findings | Confidence |",
+        "|------|--------|----------|------------|",
+    ]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _append_file_to_batch_report(path: Path, result: "FileResult") -> None:
+    """Append a single file's result row to the live batch report."""
+    name = Path(result.file_path).name
+    finding_count = len(result.verdict.report.findings) if result.verdict.report else 0
+    row = (
+        f"| `{name}` | {result.verdict.status.value} "
+        f"| {finding_count} | {result.verdict.confidence:.0%} |"
+    )
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(row + "\n")
+    except OSError as e:
+        logger.warning("Could not append to batch report %s: %s", path, e)
+
+
+def _finalize_batch_report(
+    path: Path,
+    batch: BatchVerdict,
+    errors: list[dict],
+) -> None:
+    """Append the aggregate summary section to the batch report."""
+    lines = [
         "",
         "---",
         "",
@@ -1000,32 +1402,21 @@ def _write_batch_report(
         "",
         f"> {batch.reasoning}",
         "",
-        f"**Confidence:** {batch.confidence:.0%}",
+        f"**Confidence:** {batch.confidence:.0%}  ",
+        f"**Files:** {batch.total_files}  ",
         "",
-        "## Per-File Summary",
-        "",
-        "| File | Status | Findings | Confidence |",
-        "|------|--------|----------|------------|",
     ]
-
-    for fr in batch.file_results:
-        name = Path(fr.file_path).name
-        finding_count = len(fr.verdict.report.findings) if fr.verdict.report else 0
-        lines.append(
-            f"| `{name}` | {fr.verdict.status.value} | {finding_count} | {fr.verdict.confidence:.0%} |"
-        )
 
     if errors:
         lines += [
-            "",
             "## Errors",
             "",
         ]
         for err in errors:
             lines.append(f"- `{err['file']}`: {err['error']}")
+        lines.append("")
 
     lines += [
-        "",
         "---",
         "",
         "## Aggregate Findings",
@@ -1037,15 +1428,19 @@ def _write_batch_report(
     for fr in batch.file_results:
         if fr.verdict.report:
             for finding in fr.verdict.report.findings:
-                all_findings.append((Path(fr.file_path).name, finding))
+                all_findings.append(finding)
 
     if all_findings:
-        lines.extend(_format_findings_by_severity([f for _, f in all_findings]))
+        lines.extend(_format_findings_by_severity(all_findings))
     else:
         lines.append("No issues found across any files.")
         lines.append("")
 
-    path.write_text("\n".join(lines), encoding="utf-8")
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+    except OSError as e:
+        logger.warning("Could not finalize batch report %s: %s", path, e)
 
 
 def _format_findings_by_severity(findings) -> list[str]:
