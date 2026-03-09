@@ -55,7 +55,7 @@ You've got options. You could ask your agent to self-review. You could eyeball i
 | Reviews only one file at a time | **Batch validation** — run across a whole directory, or by `--pattern "*.md"`. One command, one verdict per file |
 | Each file judged in isolation | **Cross-artifact consistency** — I check whether your files actually agree with each other via a relationships manifest |
 | Same effort whether it's a quick sanity check or a full audit | I scale: **quick** ($0.15), **standard** ($0.50), **thorough** ($2.00+) |
-| Each review starts from zero | I'm **designed to learn patterns over time** — storing memories locally *(planned, not yet active)* |
+| Each review starts from zero | I **learn patterns over time** — recurring findings auto-promote to mandatory checks via `known_issues.json` |
 
 Single agent, multi-agent swarm, hundred-step pipeline — doesn't matter how it was built. If it produced an output, I can tell you whether it holds up.
 
