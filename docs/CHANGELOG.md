@@ -132,7 +132,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [ ] Tester critic (Milestone #10)
 - [ ] Confidence calibration (Milestone #6b)
 - [ ] **Learning memory** (Milestone #7) — wire up known_issues.json frequency tracking + mandatory check promotion
-- [ ] **PyPI publish** (Milestone #14) — `pip install quorum-ai` instead of clone + install
+- [ ] **PyPI publish** (Milestone #14) — `pip install quorum-validator` instead of clone + install (package name finalized as `quorum-validator`)
 - [ ] Delegation critic (Milestone #11)
 - [ ] Style critic (Milestone #12)
 - [ ] Documentation headers adoption (Phase 1–4)
@@ -257,7 +257,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [ ] Tester critic (Milestone #10)
 - [ ] Confidence calibration (Milestone #6b)
 - [ ] **Learning memory** (Milestone #7) — wire up known_issues.json frequency tracking + mandatory check promotion
-- [ ] **PyPI publish** (Milestone #14) — `pip install quorum-ai` instead of clone + install
+- [ ] **PyPI publish** (Milestone #14) — `pip install quorum-validator` instead of clone + install (package name finalized as `quorum-validator`)
 - [ ] Delegation critic (Milestone #11)
 - [ ] Style critic (Milestone #12)
 - [ ] Documentation headers adoption (Phase 1–4)

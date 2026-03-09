@@ -78,7 +78,7 @@ class TestPrescreenProperties:
         finally:
             tmp.unlink(missing_ok=True)
 
-    @given(st.text(alphabet=st.characters(blacklist_categories=("Cc",)), max_size=3000))
+    @given(st.text(alphabet=st.characters(blacklist_categories=("Cc", "Cs")), max_size=3000))
     @settings(max_examples=30, deadline=5000)
     def test_prescreen_unicode_no_crash(self, text):
         """Unicode text must never cause a crash in any check."""

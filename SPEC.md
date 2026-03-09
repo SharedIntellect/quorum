@@ -104,9 +104,9 @@ Three execution profiles balance rigor, speed, and cost:
 |-------|---------|-----------|---------|----------|
 | **quick** | Correctness, Completeness | 0 | 5-10 min | Fast feedback; low stakes |
 | **standard** | + Security, Code Hygiene | 0 | 15-30 min | Most work; default |
-| **thorough** | All shipped critics | 1 (proposal mode) | 30-60 min | Critical decisions; production |
+| **thorough** | All shipped critics | 1 (apply + re-verify) | 30-60 min | Critical decisions; production |
 
-Pre-screen (10 built-in checks + optional DevSkim SAST, §3.1) runs before LLM critics at all depth levels. Fix loops are implemented (Phase 1.5 — proposal mode). The Fixer proposes text replacements for CRITICAL/HIGH findings when max_fix_loops > 0; re-validation loops (apply → re-run) are deferred. Full 9-critic panels are the roadmap target for thorough depth.
+Pre-screen (10 built-in checks + optional DevSkim SAST, §3.1) runs before LLM critics at all depth levels. Fix loops are implemented (Phase 1.5): the Fixer proposes text replacements for CRITICAL/HIGH findings, applies them, and re-runs critics to verify resolution. Full 9-critic panels are the roadmap target for thorough depth.
 
 ### 2.6 Transparency Over Convenience
 
@@ -265,7 +265,7 @@ relationships:
    - **PASS_WITH_NOTES** — Issues found, all addressable, recommendations provided
    - **REVISE** — HIGH/CRITICAL issues require rework; Supervisor provides guidance
    - **REJECT** — Unfixable architectural problems; restart required
-8. **Learning** — System extracts and logs new failure patterns *(specified, not yet wired up)*
+8. **Learning** — System extracts and logs new failure patterns *(implemented in v0.5.3)*
 
 ### 3.6 File-Based Artifact Passing
 
@@ -413,11 +413,10 @@ Status as of v0.5.0 (reference implementation):
 - [x] Path traversal security (boundary enforcement)
 - [x] Exit codes (0/1/2)
 - [x] Parallel critic dispatch (ThreadPoolExecutor, max 4 critics; batch files max 3)
-- [x] Fixer agent — proposal mode (Phase 1.5; proposes text replacements for CRITICAL/HIGH)
+- [x] Fixer agent — proposal mode + re-validation loops (Phase 1.5; proposes and applies text replacements for CRITICAL/HIGH, then re-runs critics to verify)
 - [x] Python code rubric (25 criteria, PC-001–PC-025, auto-detects on .py files)
+- [x] Learning memory system (known_issues.json frequency tracking + mandatory check promotion — shipped in v0.5.3)
 - [ ] Remaining 5 critics (Architecture, Delegation, Style, Tester, full Fixer)
-- [ ] Re-validation loops (apply fixes → re-run critics → verify)
-- [ ] Learning memory system (Issue model exists, not wired up)
 - [ ] Trust/monitoring system (per-critic accuracy tracking)
 
 See IMPLEMENTATION.md for a reference walkthrough.
@@ -443,17 +442,16 @@ Quorum is built on these peer-reviewed papers:
 ### Current Limitations (v3.0)
 
 - Only **4 of 9 critics are implemented** (Architecture, Delegation, Style, Tester are specified but not built)
-- **Fix loops are proposal-mode only** — Fixer proposes text replacements; re-validation loops (apply → re-run) are not yet implemented
-- **Learning memory is not wired up** — the `Issue` model exists; pattern accumulation is not connected
 - Rubric panel is **static** (doesn't specialize per artifact type dynamically)
 - **No critic-to-critic debate** (relies on Aggregator to resolve conflicts)
 - Learning is **frequency-based** only (no semantic deduplication of patterns yet)
 - **Confidence calibration** is not yet implemented
+- **Trust/monitoring system** is not yet implemented
 
 ### Planned
 
 - Remaining critics: Architecture, Delegation, Style, Tester
-- Re-validation loops — apply Fixer proposals, re-run critics, verify resolution
+- ~~Re-validation loops~~ → **Shipped in v0.5.3**
 - ~~Learning memory~~ → **Shipped in v0.5.3**
 - Dynamic critic specialization (spawn domain-specific critics on-demand)
 - Critic debate mode (when two critics conflict, run a structured debate)
@@ -473,7 +471,7 @@ Quorum is built on these peer-reviewed papers:
 ---
 
 **Quorum is a production-oriented, early-stage validation framework.**  
-*Architecture is sound and tested, but the product is still growing: no test suite, no CI, 4/9 critics shipped, learning/trust/monitoring systems specified but not wired.*
+*Architecture is sound and tested, but the product is still growing: 4/9 critics shipped, trust/monitoring systems specified but not wired; learning memory and fix re-validation shipped in v0.5.3.*
 
 
 ---
