@@ -114,7 +114,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - [x] Fix loops / Fixer agent (Milestone #5b) ← **DONE** (proposals; re-validation loops future)
 - [ ] **Test suite + CI** (Milestone #13) — pytest smoke tests, import checks, GitHub Actions. Credibility gate: no tests = not production-ready. (Grok + GPT 5.4)
 - [ ] **Claim discipline audit** — GPT 5.4 scored 2.5/5 on both README and SPEC. Fix: README ("production-grade"), GitHub org/repo descriptions ("9 critics" + "learning memory"), model table ("not enough" without benchmarks), SPEC §1 framing (nine-agent → target architecture), research citations (Tomasev/ToolMaker = "engineering interpretation of," not "validated by")
-- [ ] **Pre-screen expansion** (Milestone #15) — Wire actual SAST tools: `ruff check` (S1xx+), `bandit`, `PSScriptAnalyzer`. Current 10 regex checks become universal fallback. Frameworks reference 80+ rules from research corpus — integrate them. (Devola)
+- [ ] **Pre-screen expansion** (Milestone #15) — Wire actual SAST tools: `ruff check` (S1xx+), `bandit`, `PSScriptAnalyzer`. Current 10 regex checks become universal fallback. Frameworks reference 80+ rules from research corpus — integrate them.
 - [ ] Re-validation loops — apply Fixer proposals → re-run critics → verify (Milestone #5c)
 - [ ] Python rubric framework grounding — research swarm for PEP 8/257/484, Python antipatterns literature, map criteria to published sources with citations
 - [ ] Architecture critic (Milestone #9)

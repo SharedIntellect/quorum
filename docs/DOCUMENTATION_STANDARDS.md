@@ -228,7 +228,7 @@ This enables a future pre-screen check (`PS-011: Header validation`) that mechan
 
 - **Grep-able metadata** — `grep -r "@grounding" *.py` instantly shows which framework grounds each critic
 - **Automated validation** — pre-screen check PS-011 can validate headers against `quorum-header-schema.yaml`
-- **Onboarding** — new contributors (including Devola) can understand any file's purpose from the header alone
+- **Onboarding** — new contributors can understand any file's purpose from the header alone
 - **Single source of truth** — relationships live in `quorum-relationships.yaml`, not scattered across headers; `@relationships` is a pointer, not a declaration
 
 ---

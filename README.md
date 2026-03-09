@@ -1,11 +1,3 @@
-<!--
-  ⚠️ INTERNAL NOTE — NOT RENDERED ON GITHUB
-  Before modifying this README or any Quorum public-facing content:
-  Read portfolio/research-infrastructure/VALIDATOR-QUORUM-BOUNDARY.md
-  This defines what is public (Quorum) vs proprietary (Validator).
-  Verify no rubric content, concordance data, or Validator tooling crosses the boundary.
-  Daniel's explicit approval required before any public push.
--->
 <p align="center">
   <img src="branding/github/gh_quorum_dark.jpg" alt="Quorum" width="900">
 </p>
