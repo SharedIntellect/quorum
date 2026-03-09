@@ -96,6 +96,13 @@ def cli(verbose: bool) -> None:
     help="Path to quorum-relationships.yaml manifest for cross-artifact validation (Phase 2)",
 )
 @click.option(
+    "--fix-loops",
+    default=None,
+    type=click.IntRange(0, 3),
+    metavar="N",
+    help="Fix-and-revalidate loops (0-3). Overrides depth profile default.",
+)
+@click.option(
     "--verbose", "-v",
     is_flag=True,
     default=False,
@@ -109,6 +116,7 @@ def run_cmd(
     config: Path | None,
     output_dir: Path | None,
     relationships: Path | None,
+    fix_loops: int | None,
     verbose: bool,
 ) -> None:
     """
@@ -149,6 +157,10 @@ def run_cmd(
             quorum_config = QuorumConfig.from_yaml(config)
         else:
             quorum_config = load_config(depth=depth)
+
+        # Apply --fix-loops override if provided
+        if fix_loops is not None:
+            quorum_config = quorum_config.with_overrides(max_fix_loops=fix_loops)
 
         # Resolve targets to determine single vs batch mode
         target_path = Path(target)
@@ -193,6 +205,13 @@ def run_cmd(
             if relationships:
                 click.echo(f"Phase 2: cross-artifact validation enabled ({relationships})", err=True)
 
+            if quorum_config.max_fix_loops > 0:
+                click.echo(
+                    f"  Fix loops: up to {quorum_config.max_fix_loops} "
+                    "fix-and-revalidate loop(s) enabled",
+                    err=True,
+                )
+
             verdict, run_dir = run_validation(
                 target_path=target_path,
                 depth=depth,
@@ -201,6 +220,9 @@ def run_cmd(
                 runs_dir=output_dir or Path("quorum-runs"),
                 relationships_path=relationships,
             )
+
+            # Show fix loop progress summary if loops ran
+            _print_fix_loop_summary(run_dir)
 
             print_verdict(verdict, run_dir=run_dir, verbose=verbose)
 
@@ -285,6 +307,38 @@ def config_init() -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 # First-run helpers
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _print_fix_loop_summary(run_dir: Path) -> None:
+    """Print a summary of any fix loops that ran, based on run directory contents."""
+    import json as _json
+
+    loop_files = sorted(run_dir.glob("fix-proposals-loop-*.json"))
+    if not loop_files:
+        return
+
+    click.echo("", err=True)
+    click.echo("Fix loop summary:", err=True)
+    for loop_file in loop_files:
+        try:
+            data = _json.loads(loop_file.read_text())
+            loop_num = data.get("loop_number", "?")
+            rv = data.get("revalidation_verdict") or "N/A"
+            delta = data.get("revalidation_delta") or ""
+            n_proposals = len(data.get("proposals", []))
+            click.echo(
+                f"  Loop {loop_num}: {n_proposals} proposal(s), "
+                f"verdict={rv}"
+                + (f" — {delta}" if delta else ""),
+                err=True,
+            )
+        except Exception:
+            pass  # Non-fatal: loop summary is informational only
+
+    fixed_artifact = run_dir / "artifact-fixed.txt"
+    if fixed_artifact.exists():
+        click.echo(f"  Fixed artifact: {fixed_artifact}", err=True)
+    click.echo("", err=True)
+
 
 def _has_api_key() -> bool:
     """Check if any LiteLLM-supported API key is configured in the environment."""

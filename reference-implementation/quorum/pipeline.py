@@ -25,7 +25,7 @@ from pathlib import Path
 from quorum.agents.aggregator import AggregatorAgent
 from quorum.agents.supervisor import SupervisorAgent
 from quorum.config import QuorumConfig
-from quorum.models import BatchVerdict, FileResult, Severity, Verdict, VerdictStatus
+from quorum.models import BatchVerdict, CriticResult, FileResult, FixProposal, Severity, Verdict, VerdictStatus
 from quorum.providers.litellm_provider import LiteLLMProvider
 from quorum.rubrics.loader import RubricLoader
 
@@ -37,6 +37,130 @@ DEFAULT_RUNS_DIR = Path("quorum-runs")
 # Max concurrent file validations in batch mode
 # Keep conservative to avoid API rate limits
 MAX_BATCH_WORKERS = 3
+
+
+def apply_fix_proposals(
+    proposals: list[FixProposal],
+    artifact_text: str,
+) -> tuple[str, list[FixProposal], list[FixProposal]]:
+    """
+    Apply fix proposals to artifact text via exact string replacement.
+
+    Each proposal is applied in order. If a proposal's original_text is not
+    present (possibly already consumed by a prior proposal), it is skipped
+    with a warning.
+
+    Args:
+        proposals:     List of FixProposal objects to apply
+        artifact_text: Current text of the artifact
+
+    Returns:
+        (modified_text, applied_proposals, skipped_proposals)
+    """
+    applied: list[FixProposal] = []
+    skipped: list[FixProposal] = []
+    current_text = artifact_text
+
+    for proposal in proposals:
+        if proposal.original_text and proposal.original_text in current_text:
+            current_text = current_text.replace(
+                proposal.original_text, proposal.replacement_text, 1
+            )
+            applied.append(proposal)
+            logger.debug(
+                "Applied fix for finding '%s': replaced %d chars",
+                proposal.finding_id,
+                len(proposal.original_text),
+            )
+        else:
+            logger.warning(
+                "Fix proposal for finding '%s': original_text not found in "
+                "(possibly already-modified) artifact — skipping",
+                proposal.finding_id,
+            )
+            skipped.append(proposal)
+
+    return current_text, applied, skipped
+
+
+def _revalidate_with_critics(
+    modified_text: str,
+    blocking_findings: list,
+    provider: object,
+    config: "QuorumConfig",
+    rubric: object,
+) -> tuple[list[CriticResult], str, str]:
+    """
+    Re-run only the critics that produced the original blocking findings.
+
+    Args:
+        modified_text:     The artifact text after applying fixes
+        blocking_findings: The CRITICAL/HIGH findings from the previous run
+        provider:          Shared LLM provider instance
+        config:            Quorum config (same instance as main pipeline)
+        rubric:            Rubric used in Phase 1
+
+    Returns:
+        (new_critic_results, revalidation_verdict, revalidation_delta)
+        revalidation_verdict: 'improved' | 'unchanged' | 'regressed'
+        revalidation_delta:   Human-readable summary of what changed
+    """
+    from quorum.agents.supervisor import CRITIC_REGISTRY
+
+    # Identify critics that produced the blocking findings
+    blocking_critic_names = {
+        f.critic
+        for f in blocking_findings
+        if f.severity in (Severity.CRITICAL, Severity.HIGH)
+    }
+
+    before_count = sum(
+        1 for f in blocking_findings
+        if f.severity in (Severity.CRITICAL, Severity.HIGH)
+    )
+
+    rerun_results: list[CriticResult] = []
+    for critic_name in sorted(blocking_critic_names):  # sorted for determinism
+        cls = CRITIC_REGISTRY.get(critic_name)
+        if cls is None:
+            logger.warning(
+                "Critic '%s' not in registry, cannot re-run for revalidation",
+                critic_name,
+            )
+            continue
+        critic = cls(provider=provider, config=config)
+        result = critic.evaluate(artifact_text=modified_text, rubric=rubric)
+        rerun_results.append(result)
+
+    after_count = sum(
+        1
+        for cr in rerun_results
+        for f in cr.findings
+        if f.severity in (Severity.CRITICAL, Severity.HIGH)
+    )
+
+    if after_count < before_count:
+        verdict = "improved"
+    elif after_count == before_count:
+        verdict = "unchanged"
+    else:
+        verdict = "regressed"
+
+    delta = f"CRITICAL/HIGH findings: {before_count} → {after_count} ({verdict})"
+
+    # Note new findings introduced by the fix (flagged but not fatal)
+    if verdict == "regressed":
+        new_descriptions = [
+            f.description[:80]
+            for cr in rerun_results
+            for f in cr.findings
+            if f.severity in (Severity.CRITICAL, Severity.HIGH)
+        ]
+        if new_descriptions:
+            delta += f"; new/remaining: {new_descriptions[:3]}"
+
+    logger.info("Revalidation: %s — %s", verdict, delta)
+    return rerun_results, verdict, delta
 
 
 def _load_and_save_inputs(
@@ -222,26 +346,123 @@ def run_validation(
             result.model_dump(),
         )
 
-    # Phase 1.5: Fix proposals (if enabled and blocking findings exist)
+    # Phase 1.5: Fix proposals and re-validation loops (if enabled)
     fix_report = None
     if config.max_fix_loops > 0:
-        blocking = [f for cr in critic_results for f in cr.findings
-                    if f.severity in (Severity.CRITICAL, Severity.HIGH)]
+        blocking = [
+            f for cr in critic_results for f in cr.findings
+            if f.severity in (Severity.CRITICAL, Severity.HIGH)
+        ]
         if blocking:
             from quorum.agents.fixer import FixerAgent
             fixer = FixerAgent(provider=provider, config=config)
-            fix_report = fixer.run(
-                findings=blocking,
-                artifact_text=artifact_text,
-                artifact_path=str(target),
-            )
-            _write_json(run_dir / "fix-proposals.json", fix_report.model_dump())
-            logger.info(
-                "Fixer: %d proposals for %d findings (%d skipped)",
-                len(fix_report.proposals),
-                fix_report.findings_addressed,
-                fix_report.findings_skipped,
-            )
+            current_artifact_text = artifact_text
+            all_fix_reports: list = []
+
+            for loop_num in range(1, config.max_fix_loops + 1):
+                if not blocking:
+                    logger.info(
+                        "Fix loop %d: no blocking findings remain, stopping early",
+                        loop_num,
+                    )
+                    break
+
+                loop_fix_report = fixer.run(
+                    findings=blocking,
+                    artifact_text=current_artifact_text,
+                    artifact_path=str(target),
+                )
+                loop_fix_report.loop_number = loop_num
+
+                if not loop_fix_report.proposals:
+                    logger.info(
+                        "Fix loop %d: fixer produced no proposals, stopping early",
+                        loop_num,
+                    )
+                    loop_fix_report.revalidation_verdict = "unchanged"
+                    loop_fix_report.revalidation_delta = "Fixer produced no proposals"
+                    _write_json(
+                        run_dir / f"fix-proposals-loop-{loop_num}.json",
+                        loop_fix_report.model_dump(),
+                    )
+                    all_fix_reports.append(loop_fix_report)
+                    break
+
+                # Apply proposals to the current artifact text
+                modified_text, applied, _skipped_apply = apply_fix_proposals(
+                    loop_fix_report.proposals, current_artifact_text
+                )
+
+                if not applied:
+                    logger.info(
+                        "Fix loop %d: no proposals could be applied, stopping early",
+                        loop_num,
+                    )
+                    loop_fix_report.revalidation_verdict = "unchanged"
+                    loop_fix_report.revalidation_delta = (
+                        "No proposals could be applied to artifact"
+                    )
+                    _write_json(
+                        run_dir / f"fix-proposals-loop-{loop_num}.json",
+                        loop_fix_report.model_dump(),
+                    )
+                    all_fix_reports.append(loop_fix_report)
+                    break
+
+                current_artifact_text = modified_text
+
+                # Re-run only the critics that produced the blocking findings
+                new_critic_results, revalidation_verdict, revalidation_delta = (
+                    _revalidate_with_critics(
+                        modified_text=current_artifact_text,
+                        blocking_findings=blocking,
+                        provider=provider,
+                        config=config,
+                        rubric=rubric,
+                    )
+                )
+
+                loop_fix_report.revalidation_verdict = revalidation_verdict
+                loop_fix_report.revalidation_delta = revalidation_delta
+
+                _write_json(
+                    run_dir / f"fix-proposals-loop-{loop_num}.json",
+                    loop_fix_report.model_dump(),
+                )
+                all_fix_reports.append(loop_fix_report)
+
+                logger.info(
+                    "Fix loop %d complete: %d/%d proposals applied, verdict=%s",
+                    loop_num,
+                    len(applied),
+                    len(loop_fix_report.proposals),
+                    revalidation_verdict,
+                )
+
+                # Update blocking findings for the next loop
+                blocking = [
+                    f for cr in new_critic_results for f in cr.findings
+                    if f.severity in (Severity.CRITICAL, Severity.HIGH)
+                ]
+
+            # Save fixed artifact only if the text was actually modified
+            if current_artifact_text != artifact_text:
+                (run_dir / "artifact-fixed.txt").write_text(
+                    current_artifact_text, encoding="utf-8"
+                )
+                logger.info(
+                    "Saved fixed artifact to %s/artifact-fixed.txt", run_dir
+                )
+
+            if all_fix_reports:
+                fix_report = all_fix_reports[-1]
+                # Also write fix-proposals.json for backward compatibility
+                _write_json(run_dir / "fix-proposals.json", fix_report.model_dump())
+                logger.info(
+                    "Fixer: %d loop(s) completed, final verdict=%s",
+                    len(all_fix_reports),
+                    fix_report.revalidation_verdict or "no revalidation",
+                )
 
     # Phase 2: cross-artifact consistency (runs only when --relationships is provided)
     if relationships_path is not None:
