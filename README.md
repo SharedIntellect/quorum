@@ -190,7 +190,7 @@ I'm working. I'm real. I'm also still growing.
 
 **What I can do today** (v0.5.2):
 - Full CLI: `quorum run --target <file> [--depth] [--rubric] [--pattern] [--relationships] [--output-dir] [--verbose]`
-- **4 critics** — Correctness, Completeness, Security (OWASP ASVS 5.0, CWE Top 25, NIST SA-11), Code Hygiene (ISO 25010:2023, CISQ) — all with evidence grounding
+- **4 critics** — Correctness, Completeness, Security (OWASP ASVS 5.0, CWE Top 25, NIST SA-11; see [SEC-02 workflow](docs/SEC02_BUSINESS_LOGIC_VALIDATION.md) for business logic validation guidance), Code Hygiene (ISO 25010:2023, CISQ) — all with evidence grounding
 - **Parallel execution** — critics run concurrently (ThreadPoolExecutor, max 4); batch files run concurrently (max 3)
 - **Fixer agent** — proposes concrete text replacements for CRITICAL/HIGH findings; activates at `--depth thorough` (or when `max_fix_loops > 0`)
 - **Deterministic pre-screen** — 10 fast checks (hardcoded paths, credentials, PII, JSON/YAML/Python syntax, broken links, TODOs, whitespace, empty files) + **DevSkim SAST** (second linter pass, ~690 lines of security pattern rules) — both run before any LLM

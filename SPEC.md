@@ -153,14 +153,14 @@ Pre-screen results are written to `prescreen.json` in the run directory. If any 
 Supervisor (Orchestrator)
 ├─ Correctness Critic (Tier 2)      [IMPLEMENTED]
 ├─ Completeness Critic (Tier 2)     [IMPLEMENTED]
-├─ Security Critic (Tier 1)         [IMPLEMENTED] — grounded: OWASP ASVS 5.0, CWE Top 25, NIST SA-11
+├─ Security Critic (Tier 1)         [IMPLEMENTED] — grounded: OWASP ASVS 5.0, CWE Top 25, NIST SA-11; see docs/SEC02_BUSINESS_LOGIC_VALIDATION.md for business logic workflow
 ├─ Code Hygiene Critic (Tier 2)     [IMPLEMENTED] — grounded: ISO 25010:2023, CISQ
 ├─ Cross-Artifact Consistency       [IMPLEMENTED] — Phase 2, separate from BaseCritic
 ├─ Architecture Critic (Tier 2)     [SPECIFIED, not yet built]
 ├─ Delegation Critic (Tier 1)       [SPECIFIED, not yet built]
 ├─ Style Critic (Tier 2)            [SPECIFIED, not yet built]
 ├─ Tester (Tier 2, tools: grep/web/exec) [SPECIFIED, not yet built]
-├─ Fixer (Tier 1, optional)         [IMPLEMENTED — proposal mode; re-validation loops deferred]
+├─ Fixer (Tier 1, optional)         [IMPLEMENTED — proposal mode + re-validation loops]
 ├─ Aggregator (Tier 1)              [IMPLEMENTED]
 └─ Supervisor (Tier 1, final)       [IMPLEMENTED]
 ```
