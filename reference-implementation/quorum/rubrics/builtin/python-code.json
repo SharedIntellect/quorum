@@ -9,7 +9,7 @@
       "criterion": "No logic errors — off-by-one, wrong comparison operators, or unreachable branches",
       "severity": "CRITICAL",
       "evidence_required": "Quote the exact line(s) containing the logic error and explain what the code does vs. what it should do",
-      "why": "Logic errors cause silent incorrect behavior or runtime failures that are often hard to trace back to their source",
+      "why": "Logic errors cause silent incorrect behavior or runtime failures that are often hard to trace back to their source (PEP 20: 'Errors should never pass silently')",
       "category": "correctness"
     },
     {
@@ -25,7 +25,7 @@
       "criterion": "Exception handling is appropriately scoped — no bare except, overly broad except Exception, or swallowed errors",
       "severity": "HIGH",
       "evidence_required": "Quote the except clause and show that it either hides a specific exception type, silently swallows errors without logging, or uses a bare except that catches BaseException",
-      "why": "Overly broad exception handling turns detectable bugs into silent failures and makes diagnosis extremely difficult",
+      "why": "Overly broad exception handling turns detectable bugs into silent failures and makes diagnosis extremely difficult (PEP 20: 'Errors should never pass silently')",
       "category": "correctness"
     },
     {
@@ -33,7 +33,7 @@
       "criterion": "Data type consistency — function signatures match actual return types and Optional types propagate correctly",
       "severity": "HIGH",
       "evidence_required": "Quote the function signature (or inferred return type) and then quote a code path that returns a value inconsistent with the declared or expected type",
-      "why": "Type inconsistencies cause AttributeError, TypeError, or subtle behavioral bugs that only surface at runtime under specific conditions",
+      "why": "Type inconsistencies cause AttributeError, TypeError, or subtle behavioral bugs that only surface at runtime under specific conditions (PEP 484: Type Hints, PEP 526: Variable Annotations)",
       "category": "correctness"
     },
     {
@@ -41,7 +41,7 @@
       "criterion": "Single Responsibility — functions and classes do not mix unrelated concerns",
       "severity": "MEDIUM",
       "evidence_required": "Quote the function or class definition and identify two or more distinct unrelated responsibilities it handles (e.g., parsing + persistence + formatting in one function)",
-      "why": "SRP violations create tight coupling, make testing harder, and cause unintended side effects when changing one concern",
+      "why": "SRP violations create tight coupling, make testing harder, and cause unintended side effects when changing one concern (PEP 20: 'There should be one-- and preferably only one --obvious way to do it')",
       "category": "design"
     },
     {
@@ -49,7 +49,7 @@
       "criterion": "Appropriate abstraction level — no God functions over 50 lines mixing concerns, no unnecessary complexity",
       "severity": "MEDIUM",
       "evidence_required": "Quote the function header and state its approximate line count, describing the multiple concerns it conflates",
-      "why": "Excessively large functions are cognitively unmaintainable and resist refactoring, testing, and safe modification",
+      "why": "Excessively large functions are cognitively unmaintainable and resist refactoring, testing, and safe modification (PEP 20: 'Simple is better than complex', 'Readability counts')",
       "category": "design"
     },
     {
@@ -57,7 +57,7 @@
       "criterion": "No significant code duplication — near-duplicate logic should be extracted into reusable functions",
       "severity": "MEDIUM",
       "evidence_required": "Quote two or more near-identical code blocks (showing the duplicated logic) that could be unified into a single parameterized function",
-      "why": "Code duplication creates divergence risk: one copy gets fixed or updated while others remain buggy",
+      "why": "Code duplication creates divergence risk: one copy gets fixed or updated while others remain buggy (PEP 20: 'There should be one-- and preferably only one --obvious way to do it')",
       "category": "design"
     },
     {
@@ -65,7 +65,7 @@
       "criterion": "Dependencies are injected, not hardcoded — no global singletons or module-level instantiation that prevents testing",
       "severity": "MEDIUM",
       "evidence_required": "Quote the hardcoded dependency (e.g., direct module import with instantiation, global client object) and explain what makes it impossible to mock or substitute in tests",
-      "why": "Hardcoded dependencies couple business logic to infrastructure, making unit tests require live external systems",
+      "why": "Hardcoded dependencies couple business logic to infrastructure, making unit tests require live external systems (PEP 20: 'Complex is better than complicated')",
       "category": "design"
     },
     {
@@ -121,7 +121,7 @@
       "criterion": "Docstrings are accurate — they describe what the code actually does, not an earlier or different version",
       "severity": "MEDIUM",
       "evidence_required": "Quote the docstring and then quote the code that contradicts it, explaining the specific discrepancy",
-      "why": "Inaccurate docstrings are worse than no docstrings — they actively mislead maintainers and API consumers",
+      "why": "Inaccurate docstrings are worse than no docstrings — they actively mislead maintainers and API consumers (PEP 257: Docstring Conventions)",
       "category": "documentation"
     },
     {
@@ -129,7 +129,7 @@
       "criterion": "Variable and function names are clear and unambiguous — no misleading names or single-letter variables outside of accepted idioms",
       "severity": "MEDIUM",
       "evidence_required": "Quote the variable or function name and explain what it actually contains vs. what the name implies, or why the name is too ambiguous to understand without reading the implementation",
-      "why": "Misleading names are a form of technical debt that causes incorrect assumptions and subtle bugs during maintenance",
+      "why": "Misleading names are a form of technical debt that causes incorrect assumptions and subtle bugs during maintenance (PEP 8: Naming Conventions, PEP 20: 'Readability counts')",
       "category": "documentation"
     },
     {
@@ -137,7 +137,7 @@
       "criterion": "No magic numbers or strings — hardcoded literals with domain significance should be named constants",
       "severity": "LOW",
       "evidence_required": "Quote the hardcoded literal and explain what it represents semantically and why it should be a named constant (e.g., timeout values, status codes, buffer sizes)",
-      "why": "Magic literals are invisible — they make code unreadable and cause errors when the value needs changing and not all occurrences are found",
+      "why": "Magic literals are invisible — they make code unreadable and cause errors when the value needs changing and not all occurrences are found (PEP 8: Constants, PEP 20: 'Readability counts')",
       "category": "documentation"
     },
     {
@@ -201,7 +201,7 @@
       "criterion": "Functions separate pure logic from I/O side effects to enable unit testing without mocks",
       "severity": "MEDIUM",
       "evidence_required": "Quote the function that mixes computation with I/O (file reads/writes, network calls, database queries, random number generation) in a way that makes it impossible to test the logic without executing or mocking the I/O",
-      "why": "Functions that cannot be tested in isolation require integration test infrastructure for even basic logic verification, slowing development and reducing coverage",
+      "why": "Functions that cannot be tested in isolation require integration test infrastructure for even basic logic verification, slowing development and reducing coverage (PEP 20: 'Simple is better than complex')",
       "category": "testability"
     }
   ]
