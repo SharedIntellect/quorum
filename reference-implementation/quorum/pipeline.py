@@ -27,6 +27,7 @@ from pathlib import Path
 from quorum.agents.aggregator import AggregatorAgent
 from quorum.agents.supervisor import SupervisorAgent
 from quorum.config import QuorumConfig
+from quorum.cost import BudgetExceededError, CostTracker
 from quorum.learning import LearningMemory
 from quorum.models import BatchVerdict, CriticResult, FileResult, FixProposal, Severity, Verdict, VerdictStatus
 from quorum.providers.litellm_provider import LiteLLMProvider
@@ -264,6 +265,7 @@ def _update_manifest(
     critic_results: list,
     relationships_path: Path | None,
     learning_stats: dict | None = None,
+    cost_summary: dict | None = None,
 ) -> None:
     """Update run manifest with final stats."""
     prescreen_stats: dict = {"prescreen_enabled": config.enable_prescreen}
@@ -294,6 +296,8 @@ def _update_manifest(
             pass
     if learning_stats:
         manifest_data["learning"] = learning_stats
+    if cost_summary:
+        manifest_data["cost"] = cost_summary
     _write_json(manifest_path, manifest_data)
 
 
@@ -305,6 +309,7 @@ def run_validation(
     runs_dir: Path | None = None,
     relationships_path: Path | None = None,
     enable_learning: bool = True,
+    cost_tracker: CostTracker | None = None,
 ) -> tuple[Verdict, Path]:
     """
     Run a full Quorum validation against a target artifact.
@@ -350,7 +355,13 @@ def run_validation(
         except Exception as e:
             logger.warning("Learning memory load failed (non-fatal): %s", e)
 
-    provider = LiteLLMProvider(api_keys=config.api_keys)
+    # Set up cost tracking — use provided tracker (batch mode) or create own (single file)
+    _own_tracker = cost_tracker is None
+    if _own_tracker:
+        cost_tracker = CostTracker()
+    cost_tracker.set_current_file(str(target))
+
+    provider = LiteLLMProvider(api_keys=config.api_keys, cost_tracker=cost_tracker)
     prescreen_result = _run_prescreen(config, target, artifact_text, run_dir)
 
     # Run supervisor → critics
@@ -362,6 +373,13 @@ def run_validation(
         prescreen_result=prescreen_result,
         mandatory_context=mandatory_context,
     )
+
+    # Budget check after critics complete (non-fatal for single-file runs)
+    if config.max_cost is not None:
+        try:
+            cost_tracker.check_budget(config.max_cost)
+        except BudgetExceededError as e:
+            logger.warning("Budget exceeded after critics: %s", e)
 
     # Save Phase 1 critic results
     for result in critic_results:
@@ -541,9 +559,21 @@ def run_validation(
         except Exception as e:
             logger.warning("Learning memory update failed (non-fatal): %s", e)
 
+    # Build cost summary for manifest (only when we own the tracker — single file mode)
+    cost_summary_dict: dict | None = None
+    if _own_tracker:
+        cs = cost_tracker.summary()
+        cost_summary_dict = {
+            "total_usd": cs.total_usd,
+            "prompt_tokens": cs.prompt_tokens,
+            "completion_tokens": cs.completion_tokens,
+            "calls": cs.calls,
+            "per_file": cs.per_file,
+        }
+
     _update_manifest(
         run_dir, config, prescreen_result, verdict, critic_results,
-        relationships_path, learning_stats,
+        relationships_path, learning_stats, cost_summary_dict,
     )
 
     logger.info(
@@ -802,6 +832,7 @@ def _validate_one_file(
     config: "QuorumConfig | None",
     runs_dir: Path,
     relationships_path: "Path | None",
+    cost_tracker: "CostTracker | None" = None,
 ) -> "FileResult | dict":
     """Validate a single file, returning FileResult or error dict."""
     logger.info("Validating file %d/%d: %s", index, total, file_path)
@@ -813,6 +844,7 @@ def _validate_one_file(
             config=config,
             runs_dir=runs_dir,
             relationships_path=relationships_path,
+            cost_tracker=cost_tracker,
         )
         return FileResult(
             file_path=str(file_path),
@@ -896,6 +928,9 @@ def run_batch_validation(
 
     batch_started = datetime.now(timezone.utc).isoformat()
 
+    # Shared cost tracker for the entire batch — thread-safe, uses thread-local file context
+    batch_cost_tracker = CostTracker()
+
     # Write initial manifest immediately so a crash after this point is resumable
     _write_json_atomic(batch_dir / "batch-manifest.json", {
         "target": str(target),
@@ -950,6 +985,7 @@ def run_batch_validation(
                     file_path, i, len(files),
                     depth, rubric_name, config,
                     batch_dir / "per-file", relationships_path,
+                    batch_cost_tracker,
                 ): file_path
                 for i, file_path in enumerate(files, 1)
             }
@@ -975,6 +1011,7 @@ def run_batch_validation(
                         })
 
                     # Progressive manifest update — atomic so crash leaves valid JSON
+                    _running_cost = batch_cost_tracker.total_cost
                     _write_json_atomic(batch_dir / "batch-manifest.json", {
                         "target": str(target),
                         "pattern": pattern,
@@ -988,12 +1025,24 @@ def run_batch_validation(
                         "status": "running",
                         "completed_files": completed_files,
                         "failed_files": failed_files,
+                        "running_cost_usd": _running_cost,
                     })
 
                 # Append this file's result to the live batch report
                 if isinstance(result, FileResult):
                     with _report_lock:
                         _append_file_to_batch_report(batch_dir / "batch-report.md", result)
+
+                # Check budget after each file — stop queueing new files if exceeded
+                if config is not None and config.max_cost is not None:
+                    try:
+                        batch_cost_tracker.check_budget(config.max_cost)
+                    except BudgetExceededError as e:
+                        logger.warning(
+                            "Budget exceeded after %s: %s — stopping new file validations",
+                            file_path, e,
+                        )
+                        _stop_event.set()
 
                 # Check stop flag — cancel queued (not in-flight) futures, then exit loop
                 if _stop_event.is_set():
@@ -1023,6 +1072,16 @@ def run_batch_validation(
     # Compute aggregate verdict
     batch_verdict = _aggregate_batch(file_results, errors)
 
+    # Build final cost summary
+    batch_cs = batch_cost_tracker.summary()
+    batch_cost_dict = {
+        "total_usd": batch_cs.total_usd,
+        "prompt_tokens": batch_cs.prompt_tokens,
+        "completion_tokens": batch_cs.completion_tokens,
+        "calls": batch_cs.calls,
+        "per_file": batch_cs.per_file,
+    }
+
     # Final manifest update
     _write_json_atomic(batch_dir / "batch-manifest.json", {
         "target": str(target),
@@ -1037,6 +1096,7 @@ def run_batch_validation(
         "status": final_status,
         "completed_files": completed_files,
         "failed_files": failed_files,
+        "cost": batch_cost_dict,
     })
 
     _write_json(batch_dir / "batch-verdict.json", batch_verdict.model_dump())

@@ -46,13 +46,16 @@ class LiteLLMProvider(BaseProvider):
         self,
         api_keys: dict[str, str] | None = None,
         extra_kwargs: dict[str, Any] | None = None,
+        cost_tracker: Any | None = None,
     ):
         """
         Args:
             api_keys: Optional dict of {env_var_name: key_value} pairs.
                       These are injected into the environment before each call.
             extra_kwargs: Additional kwargs passed to every litellm.completion() call.
+            cost_tracker: Optional CostTracker for recording token usage and cost.
         """
+        super().__init__(cost_tracker=cost_tracker)
         self._api_keys = api_keys or {}
         self._extra_kwargs = extra_kwargs or {}
 
@@ -82,10 +85,39 @@ class LiteLLMProvider(BaseProvider):
                 max_tokens=max_tokens,
                 **self._extra_kwargs,
             )
-            return response.choices[0].message.content or ""
+            text = response.choices[0].message.content or ""
         except Exception as e:
             logger.error("LLM call failed for model=%s: %s", model, e)
             raise
+
+        # Track cost as a side effect — does not change return type
+        if self._cost_tracker is not None:
+            try:
+                usage = getattr(response, "usage", None)
+                if usage is not None:
+                    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+                    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+                    try:
+                        cost = litellm.completion_cost(completion_response=response)
+                        if cost is None:
+                            cost = 0.0
+                    except Exception:
+                        logger.warning(
+                            "Could not calculate completion cost for model=%s — recording $0.00",
+                            model,
+                        )
+                        cost = 0.0
+                    self._cost_tracker.track(
+                        call_name="complete",
+                        model=model,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        cost=cost,
+                    )
+            except Exception as track_err:
+                logger.warning("Cost tracking failed (non-fatal): %s", track_err)
+
+        return text
 
     def complete_json(
         self,

@@ -125,6 +125,19 @@ def cli(verbose: bool) -> None:
     default=False,
     help="Disable learning memory for this run (do not read or write known_issues.json)",
 )
+@click.option(
+    "--max-cost",
+    default=None,
+    type=float,
+    metavar="USD",
+    help="Budget cap in USD. Stops batch after each file if total spend exceeds this.",
+)
+@click.option(
+    "--yes", "-y",
+    is_flag=True,
+    default=False,
+    help="Skip pre-run cost estimate confirmation prompt.",
+)
 def run_cmd(
     target: str | None,
     pattern: str | None,
@@ -137,6 +150,8 @@ def run_cmd(
     verbose: bool,
     no_learning: bool,
     resume: Path | None,
+    max_cost: float | None,
+    yes: bool,
 ) -> None:
     """
     Validate artifacts against a rubric.
@@ -221,6 +236,10 @@ def run_cmd(
         if fix_loops is not None:
             quorum_config = quorum_config.with_overrides(max_fix_loops=fix_loops)
 
+        # Apply --max-cost override if provided
+        if max_cost is not None:
+            quorum_config = quorum_config.with_overrides(max_cost=max_cost)
+
         # Resolve targets to determine single vs batch mode
         target_path = Path(target)
         is_batch = (
@@ -241,6 +260,9 @@ def run_cmd(
             if relationships:
                 click.echo(f"Phase 2: cross-artifact validation enabled ({relationships})", err=True)
 
+            # Pre-run cost estimate
+            _show_cost_estimate_and_confirm(files, quorum_config, yes)
+
             batch_verdict, batch_dir = run_batch_validation(
                 target=target,
                 pattern=pattern,
@@ -253,6 +275,7 @@ def run_cmd(
             # Note: learning memory is not applied per-file in batch mode
 
             print_batch_verdict(batch_verdict, batch_dir=batch_dir, verbose=verbose)
+            _print_batch_cost_summary(batch_dir)
 
             if batch_verdict.is_actionable:
                 sys.exit(2)
@@ -290,6 +313,7 @@ def run_cmd(
                 _print_learning_summary(run_dir)
 
             print_verdict(verdict, run_dir=run_dir, verbose=verbose)
+            _print_run_cost_summary(run_dir)
 
             if verdict.is_actionable:
                 sys.exit(2)
@@ -598,3 +622,87 @@ def _first_run_setup(force: bool = False) -> None:
     click.echo(f"✓ Configuration written to {config_path}")
     click.echo(f"  Run: quorum run --target <your-file>")
     click.echo()
+
+
+def _show_cost_estimate_and_confirm(
+    files: list,
+    config: object,
+    skip_prompt: bool,
+) -> None:
+    """
+    Show a pre-run cost estimate and optionally prompt to continue.
+
+    Skips the prompt when:
+    - --yes flag is set
+    - estimate is below $0.50 (low-cost run, no need to interrupt)
+    - not running in an interactive terminal
+    """
+    try:
+        from quorum.cost import estimate_cost
+        estimate = estimate_cost(files, config)
+        click.echo(
+            f"Estimated cost: ~${estimate.estimated_usd:.2f} "
+            f"({estimate.estimated_calls} critic calls across {estimate.files_count} files) "
+            f"[approximate]",
+            err=True,
+        )
+
+        if skip_prompt or estimate.estimated_usd < 0.50 or not sys.stdin.isatty():
+            return
+
+        if not click.confirm("Proceed with validation?", default=True):
+            click.echo("Aborted.", err=True)
+            sys.exit(0)
+    except Exception:
+        pass  # Estimate is best-effort — never block a run
+
+
+def _print_run_cost_summary(run_dir: Path) -> None:
+    """Print cost summary from a single-file run manifest."""
+    import json as _json
+    manifest_path = run_dir / "run-manifest.json"
+    if not manifest_path.exists():
+        return
+    try:
+        data = _json.loads(manifest_path.read_text())
+        cost = data.get("cost")
+        if not cost:
+            return
+        _emit_cost_line(cost)
+    except Exception:
+        pass
+
+
+def _print_batch_cost_summary(batch_dir: Path) -> None:
+    """Print cost summary from a batch manifest."""
+    import json as _json
+    manifest_path = batch_dir / "batch-manifest.json"
+    if not manifest_path.exists():
+        return
+    try:
+        data = _json.loads(manifest_path.read_text())
+        cost = data.get("cost")
+        if not cost:
+            return
+        _emit_cost_line(cost)
+    except Exception:
+        pass
+
+
+def _emit_cost_line(cost: dict) -> None:
+    """Emit the formatted cost line(s) to stderr."""
+    total = cost.get("total_usd", 0.0)
+    prompt_t = cost.get("prompt_tokens", 0)
+    completion_t = cost.get("completion_tokens", 0)
+    calls = cost.get("calls", 0)
+    click.echo(
+        f"Cost: ${total:.4f} "
+        f"({prompt_t:,} prompt + {completion_t:,} completion tokens across {calls} calls)",
+        err=True,
+    )
+    per_file = cost.get("per_file", {})
+    if per_file:
+        # Sort by cost descending, show top 5
+        sorted_files = sorted(per_file.items(), key=lambda x: -x[1])[:5]
+        parts = " | ".join(f"{Path(fp).name} ${c:.4f}" for fp, c in sorted_files)
+        click.echo(f"Per-file: {parts}", err=True)

@@ -9,7 +9,10 @@ All LLM calls in Quorum go through this interface.
 from __future__ import annotations
 
 import abc
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from quorum.cost import CostTracker
 
 
 class BaseProvider(abc.ABC):
@@ -22,6 +25,9 @@ class BaseProvider(abc.ABC):
 
     Implementors handle auth, retry, rate limiting, etc.
     """
+
+    def __init__(self, cost_tracker: "CostTracker | None" = None) -> None:
+        self._cost_tracker = cost_tracker
 
     @abc.abstractmethod
     def complete(

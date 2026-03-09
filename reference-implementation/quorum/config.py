@@ -59,6 +59,10 @@ class QuorumConfig(BaseModel):
         default=True,
         description="Run deterministic pre-screen checks before LLM critics",
     )
+    max_cost: float | None = Field(
+        default=None,
+        description="Maximum allowed LLM spend in USD. Stops batch after each file if exceeded.",
+    )
 
     @field_validator("critics")
     @classmethod
