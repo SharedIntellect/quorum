@@ -79,9 +79,11 @@ This is what I'm growing into: not just agent output validation, but a **substan
 
 ## Let's Get Started
 
-**From ClawHub (one line):**
+**From PyPI:**
 ```bash
-openclaw skills add dacervera/quorum
+pip install quorum-validator
+export ANTHROPIC_API_KEY=your-key    # or OPENAI_API_KEY, etc.
+quorum run --target your-file.py --depth standard
 ```
 
 **Or from source:**
@@ -89,11 +91,10 @@ openclaw skills add dacervera/quorum
 git clone https://github.com/SharedIntellect/quorum.git
 cd quorum/reference-implementation
 pip install -e .
-export ANTHROPIC_API_KEY=your-key    # or OPENAI_API_KEY, etc.
 quorum run --target examples/sample-research.md --depth quick
 ```
 
-[![Available on ClawHub](https://img.shields.io/badge/ClawHub-dacervera%2Fquorum-2ba4c8)](https://clawhub.ai/dacervera/quorum)
+Also available on ClawHub: `openclaw skills add dacervera/quorum`
 
 First time? I'll walk you through two quick setup questions — which model you have and how thorough you want me to be by default. I'll save your preferences so we only do this once.
 
