@@ -15,9 +15,13 @@ from quorum.cost import (
     CostEstimate,
     CostSummary,
     CostTracker,
+    TimeEstimate,
+    THOROUGH_SECONDS_PER_FILE,
     _FALLBACK_RATE,
+    _classify_file_type,
     _get_model_rate,
     estimate_cost,
+    time_estimate,
 )
 
 
@@ -489,3 +493,192 @@ class TestCLIMaxCostFlag:
         result = runner.invoke(cli, ["run", "--help"])
         assert result.exit_code == 0
         assert "--yes" in result.output
+
+
+# ── _classify_file_type ───────────────────────────────────────────────────────
+
+
+class TestClassifyFileType:
+    def test_python_extensions(self):
+        assert _classify_file_type(Path("foo.py")) == "python"
+        assert _classify_file_type(Path("foo.pyx")) == "python"
+        assert _classify_file_type(Path("foo.pyi")) == "python"
+
+    def test_docs_extensions(self):
+        assert _classify_file_type(Path("README.md")) == "docs"
+        assert _classify_file_type(Path("notes.rst")) == "docs"
+        assert _classify_file_type(Path("notes.txt")) == "docs"
+
+    def test_config_extensions(self):
+        assert _classify_file_type(Path("config.yaml")) == "config"
+        assert _classify_file_type(Path("config.yml")) == "config"
+        assert _classify_file_type(Path("data.json")) == "config"
+        assert _classify_file_type(Path("pyproject.toml")) == "config"
+
+    def test_generic_extensions(self):
+        assert _classify_file_type(Path("script.sh")) == "generic"
+        assert _classify_file_type(Path("app.ts")) == "generic"
+        assert _classify_file_type(Path("Makefile")) == "generic"
+        assert _classify_file_type(Path("noextension")) == "generic"
+
+    def test_case_insensitive_suffix(self):
+        assert _classify_file_type(Path("FOO.PY")) == "python"
+        assert _classify_file_type(Path("README.MD")) == "docs"
+        assert _classify_file_type(Path("CONFIG.YAML")) == "config"
+
+
+# ── time_estimate ──────────────────────────────────────────────────────────────
+
+
+class TestTimeEstimate:
+    def test_empty_files(self):
+        result = time_estimate([], "standard")
+        assert isinstance(result, TimeEstimate)
+        assert result.files_count == 0
+        assert result.estimated_seconds == 0
+        assert result.min_seconds == 0
+        assert result.max_seconds == 0
+        assert result.recommended_timeout == 0
+
+    def test_quick_depth_single_python_file(self, tmp_path):
+        f = tmp_path / "test.py"
+        f.touch()
+        result = time_estimate([f], "quick")
+        assert result.depth == "quick"
+        assert result.files_count == 1
+        assert result.estimated_seconds == 12   # mid of (10, 12, 15)
+        assert result.min_seconds == 10
+        assert result.max_seconds == 15
+        assert result.recommended_timeout == 18  # int(15 * 1.2)
+
+    def test_standard_depth_multiple_files(self, tmp_path):
+        files = [tmp_path / f"f{i}.py" for i in range(5)]
+        for f in files:
+            f.touch()
+        result = time_estimate(files, "standard")
+        assert result.files_count == 5
+        assert result.estimated_seconds == 5 * 52   # 260
+        assert result.min_seconds == 5 * 45          # 225
+        assert result.max_seconds == 5 * 60          # 300
+        assert result.recommended_timeout == int(300 * 1.2)  # 360
+
+    def test_thorough_python_13_files(self, tmp_path):
+        """Mirrors the observed production run: 13 Python files ≈ 22 min."""
+        files = [tmp_path / f"f{i}.py" for i in range(13)]
+        for f in files:
+            f.touch()
+        result = time_estimate(files, "thorough")
+        assert result.files_count == 13
+        assert result.estimated_seconds == 13 * 100   # 1300 s ≈ 21.7 min
+        assert result.min_seconds == 13 * 85
+        assert result.max_seconds == 13 * 115
+
+    def test_thorough_docs_files(self, tmp_path):
+        files = [tmp_path / f"doc{i}.md" for i in range(5)]
+        for f in files:
+            f.touch()
+        result = time_estimate(files, "thorough")
+        assert result.estimated_seconds == 5 * 200   # docs mid = 200
+        assert result.min_seconds == 5 * 180
+        assert result.max_seconds == 5 * 240
+
+    def test_thorough_config_files(self, tmp_path):
+        files = [tmp_path / f"cfg{i}.yaml" for i in range(4)]
+        for f in files:
+            f.touch()
+        result = time_estimate(files, "thorough")
+        assert result.estimated_seconds == 4 * 150
+        assert result.min_seconds == 4 * 128
+        assert result.max_seconds == 4 * 172
+
+    def test_recommended_timeout_is_20pct_buffer(self, tmp_path):
+        f = tmp_path / "test.py"
+        f.touch()
+        result = time_estimate([f], "thorough")
+        assert result.recommended_timeout == int(result.max_seconds * 1.2)
+
+    def test_mixed_file_types_thorough(self, tmp_path):
+        py_file = tmp_path / "code.py"
+        md_file = tmp_path / "readme.md"
+        cfg_file = tmp_path / "config.yaml"
+        sh_file = tmp_path / "run.sh"
+        for f in [py_file, md_file, cfg_file, sh_file]:
+            f.touch()
+        result = time_estimate([py_file, md_file, cfg_file, sh_file], "thorough")
+        expected_mid = (
+            THOROUGH_SECONDS_PER_FILE["python"]
+            + THOROUGH_SECONDS_PER_FILE["docs"]
+            + THOROUGH_SECONDS_PER_FILE["config"]
+            + THOROUGH_SECONDS_PER_FILE["generic"]
+        )
+        assert result.estimated_seconds == expected_mid
+        assert result.per_type_counts == {"python": 1, "docs": 1, "config": 1, "generic": 1}
+
+    def test_unknown_depth_falls_back_to_standard(self, tmp_path):
+        f = tmp_path / "test.py"
+        f.touch()
+        result = time_estimate([f], "unknown_depth")
+        # Falls back to standard: mid=52
+        assert result.estimated_seconds == 52
+
+    def test_depth_stored_lowercase(self, tmp_path):
+        f = tmp_path / "test.py"
+        f.touch()
+        result = time_estimate([f], "THOROUGH")
+        assert result.depth == "thorough"
+
+    def test_per_type_counts_accumulate(self, tmp_path):
+        files = [tmp_path / f"f{i}.py" for i in range(3)]
+        files.append(tmp_path / "doc.md")
+        for f in files:
+            f.touch()
+        result = time_estimate(files, "standard")
+        assert result.per_type_counts["python"] == 3
+        assert result.per_type_counts["docs"] == 1
+
+
+# ── CLI --estimate-time flag ──────────────────────────────────────────────────
+
+
+class TestCLIEstimateTimeFlag:
+    def test_estimate_time_in_help(self):
+        from click.testing import CliRunner
+        from quorum.cli import cli
+        runner = CliRunner()
+        result = runner.invoke(cli, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "estimate-time" in result.output
+
+    def test_estimate_time_exits_without_running(self, tmp_path):
+        """--estimate-time prints estimate and exits 0 without calling any LLM."""
+        from click.testing import CliRunner
+        from quorum.cli import cli
+        # Create a target file so path resolution works
+        target = tmp_path / "test.py"
+        target.write_text("x = 1\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["run", "--target", str(target), "--depth", "standard", "--estimate-time"],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0
+        assert "Files to validate" in result.output
+        assert "Estimated duration" in result.output
+        assert "Recommended --timeout" in result.output
+
+    def test_estimate_time_shows_cost_line(self, tmp_path):
+        from click.testing import CliRunner
+        from quorum.cli import cli
+        target = tmp_path / "readme.md"
+        target.write_text("# Hello\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["run", "--target", str(target), "--depth", "thorough", "--estimate-time"],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0
+        assert "Estimated cost" in result.output

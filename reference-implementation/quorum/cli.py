@@ -144,6 +144,12 @@ def cli(verbose: bool) -> None:
     default=False,
     help="Generate audit-detail.csv and audit-summary.csv in the run directory. Auto-enabled at --depth thorough.",
 )
+@click.option(
+    "--estimate-time",
+    is_flag=True,
+    default=False,
+    help="Show a time estimate for the run (files, duration, recommended --timeout) then exit without validating.",
+)
 def run_cmd(
     target: str | None,
     pattern: str | None,
@@ -159,6 +165,7 @@ def run_cmd(
     max_cost: float | None,
     yes: bool,
     audit_report: bool,
+    estimate_time: bool,
 ) -> None:
     """
     Validate artifacts against a rubric.
@@ -189,8 +196,8 @@ def run_cmd(
         print_error("Provide --target <path> to start a new run, or --resume <batch-dir> to continue an interrupted one.")
         sys.exit(1)
 
-    # Check for API keys before doing any work
-    if not _has_api_key():
+    # Check for API keys before doing any work (skip for --estimate-time, no LLM needed)
+    if not estimate_time and not _has_api_key():
         _first_run_setup()
         if not _has_api_key():
             print_error(
@@ -255,6 +262,15 @@ def run_cmd(
             or "*" in target
             or "?" in target
         )
+
+        # --estimate-time: resolve files, print estimate table, exit without validating
+        if estimate_time:
+            if is_batch:
+                files = resolve_targets(target, pattern)
+            else:
+                files = [target_path]
+            _show_time_estimate(files, depth, quorum_config)
+            sys.exit(0)
 
         # Auto-enable audit report at thorough depth
         effective_audit = audit_report or (depth == "thorough")
@@ -642,13 +658,42 @@ def _first_run_setup(force: bool = False) -> None:
     click.echo()
 
 
+def _format_duration(seconds: int) -> str:
+    """Format a duration in seconds to a human-readable string."""
+    if seconds <= 0:
+        return "0 sec"
+    if seconds < 60:
+        return f"{seconds} sec"
+    mins = round(seconds / 60)
+    return f"{mins} min"
+
+
+def _show_time_estimate(files: list, depth: str, config: object) -> None:
+    """Print a time estimate table for --estimate-time and exit."""
+    from quorum.cost import time_estimate, estimate_cost
+
+    te = time_estimate(files, depth)
+    ce = estimate_cost(files, config)
+
+    click.echo()
+    click.echo(f"  Files to validate:     {te.files_count}")
+    click.echo(
+        f"  Estimated duration:    ~{_format_duration(te.estimated_seconds)} "
+        f"(range: {_format_duration(te.min_seconds)}\u2013{_format_duration(te.max_seconds)})"
+    )
+    click.echo(f"  Estimated cost:        ~${ce.estimated_usd:.2f} [approximate]")
+    if te.recommended_timeout > 0:
+        click.echo(f"  Recommended --timeout: {te.recommended_timeout} seconds (max + 20% buffer)")
+    click.echo()
+
+
 def _show_cost_estimate_and_confirm(
     files: list,
     config: object,
     skip_prompt: bool,
 ) -> None:
     """
-    Show a pre-run cost estimate and optionally prompt to continue.
+    Show a pre-run cost + time estimate and optionally prompt to continue.
 
     Skips the prompt when:
     - --yes flag is set
@@ -656,16 +701,18 @@ def _show_cost_estimate_and_confirm(
     - not running in an interactive terminal
     """
     try:
-        from quorum.cost import estimate_cost
-        estimate = estimate_cost(files, config)
+        from quorum.cost import estimate_cost, time_estimate
+        ce = estimate_cost(files, config)
+        te = time_estimate(files, getattr(config, "depth_profile", "standard"))
         click.echo(
-            f"Estimated cost: ~${estimate.estimated_usd:.2f} "
-            f"({estimate.estimated_calls} critic calls across {estimate.files_count} files) "
+            f"Estimated: ~{_format_duration(te.estimated_seconds)}, "
+            f"~${ce.estimated_usd:.2f} "
+            f"({ce.files_count} files, {getattr(config, 'depth_profile', '?')}) "
             f"[approximate]",
             err=True,
         )
 
-        if skip_prompt or estimate.estimated_usd < 0.50 or not sys.stdin.isatty():
+        if skip_prompt or ce.estimated_usd < 0.50 or not sys.stdin.isatty():
             return
 
         if not click.confirm("Proceed with validation?", default=True):

@@ -20,7 +20,33 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-# Approximate per-token costs (USD) for common models.
+# ── Time estimation calibration constants ────────────────────────────────────
+
+# Thorough depth: per-file time in seconds by file type.
+# Multipliers relative to python baseline (1.0x): docs=2.0x, config=1.5x, generic=1.2x
+# Source: production runs (13 Python files → ~22 min observed; docs heavier due to critic work)
+THOROUGH_SECONDS_PER_FILE: dict[str, int] = {
+    "python": 100,   # observed: ~100 sec/file
+    "docs": 200,     # observed range: 180-240 sec/file
+    "config": 150,   # 1.5x python baseline
+    "generic": 120,  # 1.2x python baseline
+}
+
+# Calibrated ranges for thorough depth per file type: (min_sec, max_sec)
+_THOROUGH_RANGE: dict[str, tuple[int, int]] = {
+    "python": (85, 115),
+    "docs": (180, 240),
+    "config": (128, 172),
+    "generic": (102, 138),
+}
+
+# Quick/standard depth: (min_sec, mid_sec, max_sec) — same for all file types
+_DEPTH_SECONDS: dict[str, tuple[int, int, int]] = {
+    "quick": (10, 12, 15),      # pre-screen only, no LLM calls
+    "standard": (45, 52, 60),
+}
+
+# ── Approximate per-token costs (USD) for common models ──────────────────────
 # Format: {model_name_fragment: (input_per_1k_tokens, output_per_1k_tokens)}
 # Check your provider's current pricing — these are approximate.
 _MODEL_RATES: dict[str, tuple[float, float]] = {
@@ -91,6 +117,18 @@ class CostEstimate(BaseModel):
     files_count: int
     critics_count: int
     is_approximate: bool = True
+
+
+class TimeEstimate(BaseModel):
+    """Pre-run time estimate for a validation run."""
+
+    depth: str
+    files_count: int
+    estimated_seconds: int
+    min_seconds: int
+    max_seconds: int
+    recommended_timeout: int  # max_seconds * 1.2, gives a 20% buffer
+    per_type_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class CostTracker:
@@ -260,4 +298,61 @@ def estimate_cost(files: list[Path], config: Any) -> CostEstimate:
         files_count=num_files,
         critics_count=num_critics,
         is_approximate=True,
+    )
+
+
+def _classify_file_type(path: Path) -> str:
+    """Classify a file path into a time-estimation category."""
+    suffix = path.suffix.lower()
+    if suffix in {".py", ".pyx", ".pyi"}:
+        return "python"
+    if suffix in {".md", ".rst", ".txt"}:
+        return "docs"
+    if suffix in {".yaml", ".yml", ".json", ".toml"}:
+        return "config"
+    return "generic"
+
+
+def time_estimate(files: list[Path], depth: str) -> TimeEstimate:
+    """
+    Estimate wall-clock time for a Quorum validation run.
+
+    Uses calibration data from production runs:
+    - quick:    ~10-15 sec/file (pre-screen only, no LLM)
+    - standard: ~45-60 sec/file
+    - thorough: ~85-240 sec/file depending on file type
+
+    Args:
+        files: List of file paths to validate.
+        depth: Depth profile — "quick", "standard", or "thorough".
+
+    Returns:
+        TimeEstimate with mid/min/max seconds and recommended --timeout.
+    """
+    depth_lower = depth.lower()
+    per_type: dict[str, int] = {}
+    total_min = total_mid = total_max = 0
+
+    for f in files:
+        ftype = _classify_file_type(f)
+        per_type[ftype] = per_type.get(ftype, 0) + 1
+
+        if depth_lower == "thorough":
+            mid = THOROUGH_SECONDS_PER_FILE[ftype]
+            mn, mx = _THOROUGH_RANGE[ftype]
+        else:
+            mn, mid, mx = _DEPTH_SECONDS.get(depth_lower, _DEPTH_SECONDS["standard"])
+
+        total_min += mn
+        total_mid += mid
+        total_max += mx
+
+    return TimeEstimate(
+        depth=depth_lower,
+        files_count=len(files),
+        estimated_seconds=total_mid,
+        min_seconds=total_min,
+        max_seconds=total_max,
+        recommended_timeout=int(total_max * 1.2),
+        per_type_counts=per_type,
     )
