@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: MIT
+# Quorum Self-Validation CI Gate
+# Runs standard-depth validation on changed files for every PR to main.
+# Requires ANTHROPIC_API_KEY in repository secrets.
+
+name: Quorum Validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      depth:
+        description: 'Validation depth (quick/standard/thorough)'
+        required: false
+        default: 'standard'
+      max_cost:
+        description: 'Maximum cost in USD'
+        required: false
+        default: '5.00'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Quorum Self-Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for diff
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Quorum
+        working-directory: reference-implementation
+        run: |
+          pip install -e ".[dev]"
+          pip install ruff bandit  # Optional SAST tools for pre-screen
+
+      - name: Detect changed files
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="HEAD~1"
+          fi
+
+          # Get changed files that Quorum can validate
+          CHANGED=$(git diff --name-only "$BASE" HEAD -- \
+            '*.py' '*.md' '*.yaml' '*.yml' '*.json' '*.toml' '*.ps1' \
+            | grep -v '__pycache__' \
+            | grep -v '.github/' \
+            | head -50)
+
+          if [ -z "$CHANGED" ]; then
+            echo "No validatable files changed."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            COUNT=$(echo "$CHANGED" | wc -l | tr -d ' ')
+            echo "Found $COUNT changed files to validate"
+            echo "$CHANGED"
+            # Write to file for quorum to consume
+            echo "$CHANGED" > /tmp/changed-files.txt
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run Quorum validation
+        if: steps.changes.outputs.skip != 'true'
+        working-directory: reference-implementation
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          DEPTH="${{ github.event.inputs.depth || 'standard' }}"
+          MAX_COST="${{ github.event.inputs.max_cost || '5.00' }}"
+
+          echo "::group::Quorum validation ($DEPTH depth, max \$$MAX_COST)"
+
+          EXIT_CODE=0
+          while IFS= read -r file; do
+            [ -f "$file" ] || [ -f "../$file" ] || continue
+
+            # Resolve path — files may be relative to repo root
+            if [ -f "../$file" ]; then
+              TARGET="../$file"
+            else
+              TARGET="$file"
+            fi
+
+            echo "── Validating: $file ──"
+            python -m quorum run \
+              --target "$TARGET" \
+              --depth "$DEPTH" \
+              --max-cost "$MAX_COST" \
+              --yes \
+              --audit-report \
+              2>&1 || EXIT_CODE=1
+
+          done < /tmp/changed-files.txt
+
+          echo "::endgroup::"
+          exit $EXIT_CODE
+
+      - name: Skip notice
+        if: steps.changes.outputs.skip == 'true'
+        run: echo "No validatable files changed — skipping Quorum validation."
+
+      - name: Run tests
+        working-directory: reference-implementation
+        run: |
+          python -m pytest --tb=short -q 2>&1 | tail -5
