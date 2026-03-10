@@ -8,6 +8,7 @@ from quorum.critics.code_hygiene import CodeHygieneCritic
 from quorum.critics.completeness import CompletenessCritic
 from quorum.critics.correctness import CorrectnessCritic
 from quorum.critics.security import SecurityCritic
+from quorum.critics.tester import TesterCritic
 
 __all__ = [
     "BaseCritic",
@@ -15,4 +16,5 @@ __all__ = [
     "CompletenessCritic",
     "CorrectnessCritic",
     "SecurityCritic",
+    "TesterCritic",
 ]

@@ -13,7 +13,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 from enum import Enum
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 
 class Severity(str, Enum):
@@ -157,6 +157,12 @@ class Verdict(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     report: Optional[AggregatedReport] = None
 
+    @field_serializer("status")
+    @classmethod
+    def _serialize_status(cls, v: VerdictStatus, _info: Any) -> str:
+        """Always serialize status as a plain string value, not an enum member."""
+        return v.value if isinstance(v, Enum) else str(v)
+
     @property
     def is_actionable(self) -> bool:
         """Returns True if the artifact needs rework."""
@@ -274,6 +280,68 @@ class PreScreenResult(BaseModel):
             lines.append("")
 
         return "\n".join(lines)
+
+
+class VerificationStatus(str, Enum):
+    """Outcome of the Tester critic's verification of a single finding."""
+    VERIFIED = "VERIFIED"
+    UNVERIFIED = "UNVERIFIED"
+    CONTRADICTED = "CONTRADICTED"
+
+
+class VerificationResult(BaseModel):
+    """Result of verifying a single finding against actual file content."""
+    status: VerificationStatus
+    original_finding_id: str = Field(description="ID of the finding being verified")
+    explanation: str = Field(description="Why this verification status was assigned")
+    verified_locus: Optional["VerifiedLocus"] = Field(
+        default=None,
+        description="The actual file content found at the cited location",
+    )
+    level: int = Field(
+        default=1,
+        ge=1,
+        le=2,
+        description="Verification level that produced this result (1=deterministic, 2=LLM)",
+    )
+
+
+class VerifiedLocus(BaseModel):
+    """Actual content found at a cited file location during verification."""
+    file_path: str = Field(description="Path to the file that was read")
+    line_start: Optional[int] = Field(default=None, description="1-indexed start line read")
+    line_end: Optional[int] = Field(default=None, description="1-indexed end line read")
+    actual_content: str = Field(description="The real content found at this location")
+    similarity_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fuzzy match score between cited and actual content",
+    )
+
+
+class TesterResult(BaseModel):
+    """Aggregated output from the Tester critic across all verified findings."""
+    verification_results: list[VerificationResult] = Field(default_factory=list)
+    total_findings: int = Field(default=0, description="Total findings submitted for verification")
+    verified_count: int = Field(default=0)
+    unverified_count: int = Field(default=0)
+    contradicted_count: int = Field(default=0)
+    runtime_ms: int = Field(default=0)
+
+    @property
+    def verification_rate(self) -> float:
+        """Fraction of findings that were VERIFIED."""
+        if self.total_findings == 0:
+            return 1.0
+        return self.verified_count / self.total_findings
+
+    @property
+    def contradiction_rate(self) -> float:
+        """Fraction of findings that were CONTRADICTED."""
+        if self.total_findings == 0:
+            return 0.0
+        return self.contradicted_count / self.total_findings
 
 
 class FixProposal(BaseModel):
