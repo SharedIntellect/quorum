@@ -172,9 +172,9 @@ def _is_binary_content(data: bytes, sample_size: int = 8192) -> bool:
 
 def _read_file_lines(
     file_path: Path,
-) -> tuple[list[str] | None, str | None]:
+) -> tuple[list[str], None] | tuple[None, str]:
     """
-    Read a file and return its lines, or (None, error_reason).
+    Read a file and return (lines, None) on success, or (None, error_reason) on failure.
 
     Handles: file not found, too large, binary, encoding errors.
     """
@@ -372,7 +372,8 @@ def verify_finding_l1(
                 best_result = result
             continue
 
-        assert lines is not None
+        if lines is None:
+            raise ValueError(f"Expected file lines after successful read of {file_path}")
 
         # Check line range validity
         if pl.start_line is not None:
@@ -580,9 +581,9 @@ Respond with a verdict (VERIFIED, UNVERIFIED, or CONTRADICTED) and a brief expla
             explanation = f"LLM returned unknown verdict '{verdict_str}'; defaulting to UNVERIFIED. {explanation}"
 
     except Exception as e:
-        logger.warning("Level 2 verification failed for finding %s: %s", finding.id, e)
+        logger.warning("Level 2 verification failed for finding %s: %s", finding.id, e, exc_info=True)
         status = VerificationStatus.UNVERIFIED
-        explanation = f"LLM verification call failed: {e}"
+        explanation = "LLM verification call failed due to an internal error."
 
     return VerificationResult(
         status=status,
