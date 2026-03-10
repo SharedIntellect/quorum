@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Quorum Self-Validation CI Gate
 # Runs standard-depth validation on changed files for every PR to main.
-# Requires ANTHROPIC_API_KEY in repository secrets.
+# Requires ANTHROPIC_API_KEY_GH_SHAREDIN_QUORUM in repository secrets.
 
 name: Quorum Validation
 
@@ -79,7 +79,7 @@ jobs:
         if: steps.changes.outputs.skip != 'true'
         working-directory: reference-implementation
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_GH_SHAREDIN_QUORUM }}
         run: |
           DEPTH="${{ github.event.inputs.depth || 'standard' }}"
           MAX_COST="${{ github.event.inputs.max_cost || '5.00' }}"

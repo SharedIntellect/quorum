@@ -394,3 +394,58 @@ class TestAggregatorRun:
         verdict = aggregator.run([])
         assert verdict.status == VerdictStatus.PASS
         assert verdict.confidence == 0.0
+
+    def test_verdict_json_serialization_never_none(self, aggregator):
+        """Regression test: verdict.json must always have a valid status string,
+        never None. See: fix/verdict-json-none."""
+        import json
+
+        # Test all verdict paths
+        test_cases = [
+            ([], VerdictStatus.PASS),  # empty → PASS
+            ([make_critic_result("c", [make_finding(severity=Severity.INFO)])],
+             VerdictStatus.PASS_WITH_NOTES),
+            ([make_critic_result("c", [make_finding(severity=Severity.HIGH)])],
+             VerdictStatus.REVISE),
+            ([make_critic_result("c", [make_finding(severity=Severity.CRITICAL)])],
+             VerdictStatus.REJECT),
+        ]
+
+        valid_statuses = {s.value for s in VerdictStatus}
+
+        for critic_results, expected_status in test_cases:
+            verdict = aggregator.run(critic_results)
+
+            # Verify the object
+            assert verdict.status == expected_status
+            assert verdict.status is not None
+
+            # Verify serialization (what gets written to verdict.json)
+            dumped = verdict.model_dump()
+            assert dumped["status"] is not None, f"verdict.json status is None for {expected_status}"
+            assert dumped["status"] in valid_statuses, f"verdict.json status '{dumped['status']}' not in {valid_statuses}"
+
+            # Verify round-trip through JSON (what gets read back)
+            json_str = json.dumps(dumped)
+            loaded = json.loads(json_str)
+            assert loaded["status"] is not None
+            assert loaded["status"] in valid_statuses
+
+    def test_verdict_fallback_serialization(self, aggregator):
+        """Regression test: even the aggregator-crash fallback path must serialize
+        a valid status, never None."""
+        import json
+
+        fallback = Verdict(
+            status=VerdictStatus.REJECT,
+            reasoning="Aggregator failed: test",
+            confidence=0.0,
+            report=None,
+        )
+        dumped = fallback.model_dump()
+        assert dumped["status"] == "REJECT"
+        assert dumped["status"] is not None
+
+        json_str = json.dumps(dumped)
+        loaded = json.loads(json_str)
+        assert loaded["status"] == "REJECT"
