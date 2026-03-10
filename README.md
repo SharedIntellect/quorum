@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="branding/github/gh_quorum_dark.jpg" alt="Quorum" width="900">
+  <img src="branding/github/dark_qu_gh.jpg" alt="Quorum" width="900">
 </p>
 
 <p align="center">
