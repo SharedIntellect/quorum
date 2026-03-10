@@ -56,8 +56,11 @@ jobs:
           fi
 
           # Get changed files that Quorum can validate
+          # NOTE: Currently limited to Python files — Quorum auto-detects the
+          # python-code rubric for .py files. Other file types (markdown, YAML,
+          # etc.) will be added once dedicated rubrics are available.
           CHANGED=$(git diff --name-only "$BASE" HEAD -- \
-            '*.py' '*.md' '*.yaml' '*.yml' '*.json' '*.toml' '*.ps1' \
+            '*.py' \
             | grep -v '__pycache__' \
             | grep -v '.github/' \
             | head -50)
