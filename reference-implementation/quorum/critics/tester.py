@@ -448,7 +448,8 @@ def verify_finding_l1(
             best_score = score
             best_result = result
 
-    assert best_result is not None
+    if best_result is None:
+        raise ValueError("No verification result produced — at least one locus must be evaluated")
     return best_result
 
 
@@ -580,10 +581,14 @@ Respond with a verdict (VERIFIED, UNVERIFIED, or CONTRADICTED) and a brief expla
             status = VerificationStatus.UNVERIFIED
             explanation = f"LLM returned unknown verdict '{verdict_str}'; defaulting to UNVERIFIED. {explanation}"
 
-    except Exception as e:
+    except (ValueError, KeyError, TypeError, RuntimeError) as e:
         logger.warning("Level 2 verification failed for finding %s: %s", finding.id, e, exc_info=True)
         status = VerificationStatus.UNVERIFIED
         explanation = "LLM verification call failed due to an internal error."
+    except OSError as e:
+        logger.warning("Level 2 network/IO error for finding %s: %s", finding.id, e, exc_info=True)
+        status = VerificationStatus.UNVERIFIED
+        explanation = "LLM verification call failed due to a connectivity error."
 
     return VerificationResult(
         status=status,
