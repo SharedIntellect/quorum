@@ -77,7 +77,7 @@ quorum run --target examples/sample-research.md
 
 That's a working Python CLI that orchestrates multiple AI critics, enforces evidence grounding, and produces structured verdicts.
 
-Quorum also has a **specification** (SPEC.md) — a detailed document describing the full architecture. The reference implementation currently ships 4 critics with parallel execution, a fixer (proposal mode), and pre-screen integration. The spec describes the complete vision (9 critics, learning memory, fix loops). See SPEC.md §3 for the current status matrix.
+Quorum also has a **specification** (SPEC.md) — a detailed document describing the full architecture. The reference implementation currently ships 6 critics (including Cross-Consistency, activated with `--relationships`) with parallel execution, re-validation loops, learning memory, a fixer (proposal mode), and pre-screen integration. The spec describes the complete vision (9 critics). See SPEC.md §3 for the current status matrix.
 
 We also provide:
 - **Configuration files** — YAML presets that control how thorough the validation is and which AI models to use.
@@ -131,13 +131,13 @@ Yes. Quorum uses "rubrics" — JSON files that define what good looks like for y
 Quorum is currently designed for OpenClaw. The specification is platform-agnostic in principle — a capable agent on any platform could read and execute it — but we've only tested and optimized for OpenClaw. Cross-platform support is being researched.
 
 ### "Is this production-ready?"
-The specification is mature and has been used in production for configuration auditing, research validation, and code review. The reference implementation CLI is working — `quorum run` produces real, evidence-grounded verdicts with 4 critics, parallel execution, and pre-screen integration today. It's being actively developed: more critics, learning memory, and re-validation loops are coming.
+The specification is mature and has been used in production for configuration auditing, research validation, and code review. The reference implementation CLI is working — `quorum run` produces real, evidence-grounded verdicts with 6 critics, parallel execution, re-validation loops, and learning memory today. It's being actively developed: 3 more critics (Architecture, Delegation, Style) are coming.
 
 ### "How much does it cost to run?"
 Quorum uses AI model API calls, so costs depend on your model and depth:
 - **Quick** (2 critics): ~$0.10-0.30 per run
-- **Standard** (4 critics): ~$0.30-1.00 per run  
-- **Thorough** (6+ critics): ~$1.00-3.00 per run
+- **Standard** (6 critics): ~$0.30-1.00 per run  
+- **Thorough** (6 critics + fix loops): ~$1.00-3.00 per run
 
 These are estimates based on Claude Sonnet pricing. Your costs will vary by model and document size.
 

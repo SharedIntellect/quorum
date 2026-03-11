@@ -9,7 +9,7 @@
 
 ## 1. Overview
 
-Quorum is a quality assurance framework with a nine-agent target architecture. Currently, 5 critics are implemented (Correctness, Completeness, Security, Code Hygiene, and Cross-Artifact Consistency), with 4 additional critics planned. The framework is designed to rigorously evaluate multi-agent systems, configurations, research, code, and operational procedures against domain-specific rubrics. It combines:
+Quorum is a quality assurance framework with a nine-agent target architecture. Currently, 6 critics are implemented (Correctness, Completeness, Security, Code Hygiene, Cross-Artifact Consistency†, and Tester), with 3 additional critics planned. †Cross-Consistency is activated with the `--relationships` flag. The framework is designed to rigorously evaluate multi-agent systems, configurations, research, code, and operational procedures against domain-specific rubrics. It combines:
 
 - **Parallel specialized critics** (9 agents with distinct expertise)
 - **Grounded evidence requirement** (every critique must cite tool-verified proof)
@@ -403,8 +403,7 @@ Status as of v0.5.0 (reference implementation):
 - [x] LLM provider — LiteLLM universal provider (100+ models, any tier combination)
 - [x] File-based artifact passing (no in-memory state between agents)
 - [x] Pre-screen layer — 10 built-in checks (PS-001–PS-010) + DevSkim SAST integration
-- [x] 4 critics implemented — Correctness, Completeness, Security, Code Hygiene
-- [x] Cross-Artifact Consistency critic (Phase 2, relationships manifest)
+- [x] 6 critics implemented — Correctness, Completeness, Security, Code Hygiene, Cross-Artifact Consistency† (`--relationships`), Tester (L1 + L2)
 - [x] Rubric system (JSON schema + validator, 3 built-in rubrics: research-synthesis, agent-config, python-code)
 - [x] Batch/multi-file validation with `BatchVerdict`
 - [x] Aggregator synthesis logic (conflict resolution)
@@ -416,7 +415,7 @@ Status as of v0.5.0 (reference implementation):
 - [x] Fixer agent — proposal mode + re-validation loops (Phase 1.5; proposes and applies text replacements for CRITICAL/HIGH, then re-runs critics to verify)
 - [x] Python code rubric (25 criteria, PC-001–PC-025, auto-detects on .py files)
 - [x] Learning memory system (known_issues.json frequency tracking + mandatory check promotion — shipped in v0.5.3)
-- [ ] Remaining 4 critics — Architecture, Delegation, Style, Tester
+- [ ] Remaining 3 critics — Architecture, Delegation, Style
 - [ ] Trust/monitoring system (per-critic accuracy tracking)
 
 See IMPLEMENTATION.md for a reference walkthrough.
@@ -441,7 +440,7 @@ Quorum is built on these peer-reviewed papers:
 
 ### Current Limitations (v3.0)
 
-- Only **5 of 9 critics are implemented** (Architecture, Delegation, Style, Tester are specified but not built)
+- Only **6 of 9 critics are implemented** (Architecture, Delegation, Style are specified but not built)
 - Rubric panel is **static** (doesn't specialize per artifact type dynamically)
 - **No critic-to-critic debate** (relies on Aggregator to resolve conflicts)
 - Learning is **frequency-based** only (no semantic deduplication of patterns yet)
@@ -450,7 +449,7 @@ Quorum is built on these peer-reviewed papers:
 
 ### Planned
 
-- Remaining critics: Architecture, Delegation, Style, Tester
+- Remaining critics: Architecture, Delegation, Style
 - ~~Re-validation loops~~ → **Shipped in v0.5.3**
 - ~~Learning memory~~ → **Shipped in v0.5.3**
 - Dynamic critic specialization (spawn domain-specific critics on-demand)

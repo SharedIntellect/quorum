@@ -109,10 +109,12 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
 | Depth | Critics | Time | Cost* | When to use it |
 |-------|---------|------|-------|----------------|
 | **Quick** | 2 (correctness, completeness) | 5-10 min | ~$0.15 | "Give me a sanity check before I keep going" |
-| **Standard** | 4 (+ security, code_hygiene) | 15-30 min | ~$0.50 | Most work — solid coverage without the wait |
-| **Thorough** | 4 now; more when they ship | 30-60 min | ~$1.50+ | "This is going to production. It cannot be wrong." |
+| **Standard** | 6 (+ security, code_hygiene, cross_consistency†, tester) | 15-30 min | ~$0.50 | Most work — solid coverage without the wait |
+| **Thorough** | 6 shipped; more when they ship | 30-60 min | ~$1.50+ | "This is going to production. It cannot be wrong." |
 
-*Estimates on Claude Sonnet. Scales with model and artifact size. Pre-screen (10 deterministic checks + DevSkim + Ruff + Bandit + PSScriptAnalyzer) runs before LLM critics at every depth level — no extra cost. Today I ship with 4 critics (Correctness, Completeness, Security, Code Hygiene) + re-validation loops + learning memory. Architecture, Delegation, and Tester are coming — the full architecture supports all 9 (see [SPEC.md](SPEC.md)).
+*†Cross-Consistency requires `--relationships` flag with a relationships manifest.*
+
+*Estimates on Claude Sonnet. Scales with model and artifact size. Pre-screen (10 deterministic checks + DevSkim + Ruff + Bandit + PSScriptAnalyzer) runs before LLM critics at every depth level — no extra cost. Today I ship with 6 critics (Correctness, Completeness, Security, Code Hygiene, Cross-Consistency†, and Tester) + re-validation loops + learning memory. The full architecture supports all 9 — Architecture, Delegation, and Style are next (see [SPEC.md](SPEC.md)).*
 
 ---
 
@@ -137,8 +139,11 @@ Not every artifact needs the full treatment. Tell me how much is riding on it, a
    │  ┌──────────┐ ┌──────────┐             │
    │  │ Security │ │CodeHygine│  ← shipped  │
    │  └──────────┘ └──────────┘             │
+   │  ┌──────────┐ ┌──────────┐             │
+   │  │CrossConsist│ │ Tester │  ← shipped  │
+   │  └──────────┘ └──────────┘  (†Cross-Consistency requires --relationships)
    │  ┌──────┐ ┌──────┐ ┌────────┐         │
-   │  │ Arch │ │Deleg │ │ Tester │ ← roadmap│
+   │  │ Arch │ │Deleg │ │ Style  │ ← roadmap│
    │  └──────┘ └──────┘ └────────┘         │
    └──────────────┬───────────────────────────┘
                   │ Phase 1.5: (if max_fix_loops > 0)
@@ -189,9 +194,9 @@ I auto-detect your model on first run and configure myself accordingly. Details:
 
 I'm working. I'm real. I'm also still growing.
 
-**What I can do today** (v0.5.3):
+**What I can do today** (v0.6.0):
 - Full CLI: `quorum run --target <file> [--depth] [--rubric] [--pattern] [--relationships] [--output-dir] [--verbose] [--fix-loops N] [--no-learning] [--max-cost USD] [--audit-report] [--resume <batch-dir>] [--yes]`
-- **4 critics** — Correctness, Completeness, Security (OWASP ASVS 5.0, CWE Top 25, NIST SA-11; see [SEC-02 workflow](docs/SEC02_BUSINESS_LOGIC_VALIDATION.md) for business logic validation guidance), Code Hygiene (ISO 25010:2023, CISQ) — all with evidence grounding
+- **6 critics** — Correctness, Completeness, Security (OWASP ASVS 5.0, CWE Top 25, NIST SA-11; see [SEC-02 workflow](docs/SEC02_BUSINESS_LOGIC_VALIDATION.md) for business logic validation guidance), Code Hygiene (ISO 25010:2023, CISQ), Cross-Consistency† (`--relationships`), and Tester (L1 deterministic + L2 LLM claim verification) — all with evidence grounding
 - **Parallel execution** — critics run concurrently (ThreadPoolExecutor, max 4); batch files run concurrently (max 3)
 - **Re-validation loops** — Fixer proposes text replacements for CRITICAL/HIGH findings → applies them → re-runs only the critics that flagged the originals → reports improved/unchanged/regressed. Up to 3 loops, stops early when findings clear. `--fix-loops N` or `--depth thorough` (default 1 loop)
 - **Learning memory** — tracks recurring failure patterns across runs in `known_issues.json`. High-frequency patterns auto-promote to mandatory checks injected into critic prompts. `quorum issues list|promote|reset` CLI. Disable with `--no-learning`
@@ -210,7 +215,7 @@ I'm working. I'm real. I'm also still growing.
 
 **What's coming:**
 - Dynamic model pricing updates (`quorum costs update`)
-- More critics (Architecture, Delegation, Style, Tester)
+- More critics (Architecture, Delegation, Style)
 - Domain-specific rubric packs (compliance, security, infrastructure)
 - Confidence calibration against golden sets
 - Branch protection enforcement (require PR + passing validation to merge to main)

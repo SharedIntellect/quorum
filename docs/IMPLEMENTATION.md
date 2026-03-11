@@ -161,7 +161,7 @@ Each critic receives:
 - Tools: schema parse of contract sections, grep for oversight mechanisms
 - Model tier: Opus (requires Tomasev framework knowledge)
 
-### 2.3 The Tester Agent 🔜
+### 2.3 The Tester Agent ✅
 
 The Tester doesn't evaluate — it verifies. For each issue raised by critics:
 
