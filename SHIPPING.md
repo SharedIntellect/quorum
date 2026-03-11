@@ -17,6 +17,7 @@ Follow this checklist before merging any feature PR to `main`. Both humans and a
 Run `python tools/validate-docs.py` to find stale references, then fix:
 
 - [ ] `CHANGELOG.md` — add entry for this release
+- [ ] `README.md` — version badge in header
 - [ ] `README.md` — "What I can do today" section accurate
 - [ ] `README.md` — critic count in depth table footnote
 - [ ] `README.md` — architecture diagram labels (shipped vs roadmap)
