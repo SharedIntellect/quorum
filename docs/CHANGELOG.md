@@ -4,6 +4,54 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0] — 2026-03-10
+
+### Added
+
+#### Tester Critic (Milestone #10) — Critic 6 of 9
+- **L1 Deterministic Verification**: checks finding loci exist, line numbers are in range, excerpts match source text, file paths are valid
+- **L2 LLM Claim Verification**: language model evaluates whether each finding's claim is substantiated by the cited evidence
+- 805 lines of code, 994 lines of tests, 76/76 passing
+- Merged via PR #8
+
+#### Shipping Process Infrastructure
+- **`critic-status.yaml`** — single source of truth for shipped critic and feature status. All doc references derive from this manifest instead of hardcoding counts
+- **`tools/validate-docs.py`** — automated doc validation that reads the manifest, scans all public markdown files for stale critic counts, outdated status markers (🔜/Planned for shipped critics), and roadmap references to shipped features. Exit 0 = clean, exit 1 = findings
+- **`SHIPPING.md`** — shipping checklist for humans and agents (including Claude Code) to follow before merging feature PRs to main
+- **`.github/workflows/validate-docs.yml`** — CI enforcement: runs `validate-docs.py` on every PR to main. Manual checks have repeatedly failed to catch doc staleness; CI is the reliable gate
+
+#### SEC-07: Self-Validation Convergence Problem
+- Documented the iterative self-validation convergence problem observed during PR #8
+- Root cause: fresh context per run, fix-induced findings, severity recalibration, no delta awareness
+- Five mitigations proposed; interim decision: advisory-only self-validation (CRITICAL-only blocking)
+- Self-validation moved to non-required in GitHub branch ruleset
+
+### Changed
+- **Cross-Consistency critic** now counted as shipped (critic 5 of 9) in all documentation, with visible note that it requires `--relationships` flag
+- Version bump to 0.6.0 across `pyproject.toml`, `critic-status.yaml`, and all docs
+
+### Documentation
+- **Full doc sweep**: 10 files updated to reflect 6 shipped critics (was inconsistently 4 or 5 across different files)
+- README.md architecture diagram updated: Cross-Consistency and Tester moved to "shipped" row; Style remains in "roadmap"
+- SPEC.md status matrix, limitations, and roadmap sections updated (6/9 implemented, 3 remaining)
+- CONFIG_REFERENCE.md, TUTORIAL.md, IMPLEMENTATION.md — Tester status markers updated from 🔜 to ✅
+- FOR_BEGINNERS.md — critic counts and cost estimates updated
+- MODEL_REQUIREMENTS.md — cost estimates updated for 6-critic standard depth
+- CROSS_ARTIFACT_DESIGN.md — `threat_context` relationship type marked as shipped
+- SEC03_EVIDENCE_INTEGRITY.md — Tester status updated from "planned" to "shipped"
+- docs/TESTER_CRITIC_BRIEF.md — design brief for Tester critic
+
+### Roadmap Status
+- [x] Tester critic (Milestone #10) — L1 deterministic + L2 LLM verification
+- [x] Shipping process infrastructure — manifest, validation script, CI gate, checklist
+- [ ] Architecture critic (Milestone #9)
+- [ ] Confidence calibration (Milestone #6b)
+- [ ] Delegation critic (Milestone #11)
+- [ ] Style critic (Milestone #12)
+- [ ] **Hardware-backed result protection** (Milestone #18)
+
+---
+
 ## [0.5.3] — 2026-03-09
 
 ### Added

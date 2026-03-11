@@ -55,7 +55,7 @@ For per-critic overrides, see [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md).
 
 ## Cost Estimates
 
-Rough per-run costs at default (standard) depth with 2 critics:
+Rough per-run costs at default (standard) depth with 6 critics:
 
 | Configuration | Tier 1 | Tier 2 | Estimated Cost |
 |---------------|--------|--------|----------------|
@@ -63,7 +63,7 @@ Rough per-run costs at default (standard) depth with 2 critics:
 | Balanced | Sonnet | Sonnet | ~$0.30–0.60 |
 | Premium | Opus | Sonnet | ~$1.00–2.50 |
 
-Costs scale roughly linearly with critic count and artifact size. The `quick` depth profile (3 critics, no fix rounds) is the cheapest option for iteration.
+Costs scale roughly linearly with critic count and artifact size. The `quick` depth profile (2 critics, no fix rounds) is the cheapest option for iteration.
 
 ## Platform Compatibility
 

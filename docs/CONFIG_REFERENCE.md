@@ -27,7 +27,7 @@ Quorum uses a two-tier model architecture. Assign your models based on role requ
 | Architecture Critic | Tier 2 | Structural analysis | 🔜 Planned |
 | Completeness Critic | Tier 2 | Coverage checking | ✅ Shipped |
 | Style Critic | Tier 2 | Convention enforcement | 🔜 Planned |
-| Tester | Tier 2 | Tool execution, grep, schema parsing | 🔜 Planned |
+| Tester | Tier 2 | Tool execution, grep, schema parsing | ✅ Shipped (L1 deterministic + L2 LLM) |
 
 **Examples:** Tier 1 = Claude Opus, GPT-4, Gemini Ultra. Tier 2 = Claude Sonnet, GPT-4o-mini, Gemini Flash.
 

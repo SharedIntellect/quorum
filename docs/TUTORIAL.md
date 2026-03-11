@@ -78,7 +78,7 @@ quorum run \
    - **Architecture Critic:** 🔜 *(Planned)* Would flag researcher having 6 tools (exec + agent_spawn are high-risk for a read-only role)
    - **Delegation Critic:** 🔜 *(Planned)* Would flag missing `output_contract` on synthesizer; in-memory template passing on validator
 
-3. **Tester** 🔜 *(Planned)* verifies:
+3. **Tester** ✅ verifies:
    - `grep -n '\$[A-Z]' bad-config.yaml` → confirms line 8 injection
    - Schema parse confirms missing `model` on researcher
    - Schema parse confirms `synthesizer` has no `output_contract`
@@ -190,7 +190,7 @@ Expected result: **PASS** (or PASS_WITH_NOTES on the remaining LOW issues)
 2. The **Completeness Critic** caught a missing model assignment that would have caused non-deterministic behavior
 3. The **Architecture Critic** 🔜 would catch excessive tool permissions that violated least-privilege
 4. The **Delegation Critic** 🔜 would catch in-memory passing that breaks parallelism and determinism
-5. The **Tester** 🔜 would verify every finding with actual tool output — no hand-waving
+5. The **Tester** ✅ verifies every finding with actual tool output — no hand-waving
 6. The **Fixer** gave you concrete, applicable changes
 
 That's Quorum working as designed.

@@ -1,0 +1,64 @@
+# critic-status.yaml — Single source of truth for shipped features
+# Used by tools/validate-docs.py to detect stale documentation.
+# Update this file FIRST when shipping a critic or feature.
+
+version: "0.6.0"
+
+critics:
+  correctness:
+    status: shipped
+    since: "0.3.0"
+    description: "Factual accuracy, citation validity, logical consistency"
+  completeness:
+    status: shipped
+    since: "0.3.0"
+    description: "Coverage gaps, missing sections, rubric criterion coverage"
+  security:
+    status: shipped
+    since: "0.4.0"
+    description: "OWASP ASVS 5.0, CWE Top 25, NIST SA-11, business logic"
+  code_hygiene:
+    status: shipped
+    since: "0.4.0"
+    description: "ISO 25010:2023, CISQ quality measures, maintainability"
+  cross_consistency:
+    status: shipped
+    since: "0.5.0"
+    description: "Inter-file consistency via relationships manifest (requires --relationships flag)"
+    note: "Activated with --relationships flag; not part of default depth panel"
+  tester:
+    status: shipped
+    since: "0.6.0"
+    description: "Finding verification — L1 deterministic + L2 LLM claim checking"
+  architecture:
+    status: planned
+    description: "Structural design, modularity, dependency analysis"
+  delegation:
+    status: planned
+    description: "Multi-agent coordination, responsibility boundaries"
+  style:
+    status: planned
+    description: "Writing quality, tone consistency, formatting standards"
+
+features:
+  prescreen:
+    status: shipped
+    description: "10 deterministic checks + DevSkim + Ruff + Bandit + PSScriptAnalyzer"
+  fix_loops:
+    status: shipped
+    description: "Re-validation loops with fixer proposals, up to 3 iterations"
+  learning_memory:
+    status: shipped
+    description: "Recurring pattern tracking via known_issues.json"
+  batch_validation:
+    status: shipped
+    description: "Directory/pattern validation with crash-resilient progressive saves"
+  cost_tracking:
+    status: shipped
+    description: "Per-call token counts, cost estimates, budget caps"
+  audit_reports:
+    status: shipped
+    description: "CSV audit detail + summary reports with SHA-256 integrity"
+  time_estimation:
+    status: shipped
+    description: "Pre-run time + cost estimates with --estimate-time flag"
