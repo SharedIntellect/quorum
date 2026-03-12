@@ -4,6 +4,20 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0-port.1] — 2026-03-12
+
+### Added
+- **Copilot CLI port** at `ports/copilot-cli/` — Quorum's multi-critic validation framework packaged as a GitHub Copilot CLI skill. Zero infrastructure, zero pip dependencies.
+  - `SKILL.md` (414 lines): Orchestrator skill — artifact classification, rubric selection, prescreen gating, critic dispatch, verdict aggregation, report generation.
+  - `quorum-prescreen.py` (649 lines): Stdlib-only pre-screen implementing PS-001 through PS-010. PyYAML optional for YAML artifact support.
+  - 5 critic `.agent.md` files: Verbatim prompts for correctness, completeness, security, code hygiene, and cross-consistency critics.
+  - 3 rubric JSON files: Byte-identical copies from reference implementation (python-code, research-synthesis, agent-config).
+  - `README.md`: Install and usage guide.
+  - `ARCHITECTURE.md`: Port design rationale and mapping to reference implementation.
+
+### Changed
+- `.gitignore`: Removed `ports/` exclusion — ports are now tracked for public release.
+
 ## [0.7.0] — 2026-03-12
 
 ### Added
