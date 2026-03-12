@@ -100,9 +100,9 @@ Each finding includes: severity (CRITICAL/HIGH/MEDIUM/LOW), evidence citations p
 ## More Information
 
 - [SPEC.md](https://github.com/SharedIntellect/quorum/blob/main/SPEC.md) — Full architectural specification
-- [MODEL_REQUIREMENTS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/MODEL_REQUIREMENTS.md) — Supported models and tiers
-- [CONFIG_REFERENCE.md](https://github.com/SharedIntellect/quorum/blob/main/docs/CONFIG_REFERENCE.md) — All configuration options
-- [FOR_BEGINNERS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/FOR_BEGINNERS.md) — New to agent validation? Start here
+- [MODEL_REQUIREMENTS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/getting-started/MODEL_REQUIREMENTS.md) — Supported models and tiers
+- [CONFIG_REFERENCE.md](https://github.com/SharedIntellect/quorum/blob/main/docs/configuration/CONFIG_REFERENCE.md) — All configuration options
+- [FOR_BEGINNERS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/getting-started/FOR_BEGINNERS.md) — New to agent validation? Start here
 
 
 ---

@@ -25,7 +25,7 @@ Every source file gets a metadata block at the top, using `@KEY: value` pairs in
 ```python
 # @module: quorum.critics.code_hygiene
 # @purpose: Code quality evaluation grounded in ISO 25010 + CISQ
-# @grounding: CODE_HYGIENE_FRAMEWORK.md
+# @grounding: critics/CODE_HYGIENE_FRAMEWORK.md
 # @owner: code-hygiene-critic
 # @version: 0.3.0
 # @tier: tier-2 (default model assignment)
@@ -34,7 +34,7 @@ Every source file gets a metadata block at the top, using `@KEY: value` pairs in
 
 **Markdown:**
 ```markdown
-<!-- @doc: CROSS_ARTIFACT_DESIGN.md -->
+<!-- @doc: guides/CROSS_ARTIFACT_DESIGN.md -->
 <!-- @purpose: Architectural decisions for cross-file consistency checking -->
 <!-- @status: design-complete -->
 <!-- @version: 1.0 -->
@@ -47,7 +47,7 @@ Every source file gets a metadata block at the top, using `@KEY: value` pairs in
 # @config: quorum-relationships.yaml
 # @purpose: Declared file relationships for cross-artifact consistency
 # @schema-version: 1.0
-# @see: CROSS_ARTIFACT_DESIGN.md
+# @see: guides/CROSS_ARTIFACT_DESIGN.md
 ```
 
 **Shell:**
@@ -199,9 +199,9 @@ This enables a future pre-screen check (`PS-011: Header validation`) that mechan
 - [ ] `prescreen.py`
 
 ### Phase 3: Framework & Design Docs
-- [ ] `CODE_HYGIENE_FRAMEWORK.md`
-- [ ] `SECURITY_CRITIC_FRAMEWORK.md`
-- [ ] `CROSS_ARTIFACT_DESIGN.md`
+- [ ] `critics/CODE_HYGIENE_FRAMEWORK.md`
+- [ ] `critics/SECURITY_CRITIC_FRAMEWORK.md`
+- [ ] `guides/CROSS_ARTIFACT_DESIGN.md`
 - [ ] `SPEC.md`
 - [ ] `CHANGELOG.md`
 
@@ -219,7 +219,7 @@ This enables a future pre-screen check (`PS-011: Header validation`) that mechan
 | Pipeline & CLI | `docs/PIPELINE_REFERENCE.md` | High — users need this |
 | Pre-Screen System | `docs/PRESCREEN_REFERENCE.md` | High — 10 checks need documentation |
 | Critic Framework | `docs/CRITIC_ARCHITECTURE.md` | Medium — developers extending Quorum |
-| Rubric System | `docs/RUBRIC_BUILDING_GUIDE.md` | **Already exists** ✅ |
+| Rubric System | `docs/guides/RUBRIC_BUILDING_GUIDE.md` | **Already exists** ✅ |
 | Cross-Artifact | `docs/CROSS_ARTIFACT_DESIGN.md` | **Already exists** ✅ |
 
 ---

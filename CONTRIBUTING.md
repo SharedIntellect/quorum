@@ -54,7 +54,7 @@ Improvements to docs, tutorials, and examples are always welcome. If something w
 
 ### 🔬 External Reviews
 
-Run Quorum against your own system and share the results. See `docs/EXTERNAL_REVIEWS.md` for how to submit.
+Run Quorum against your own system and share the results. See `docs/reviews/EXTERNAL_REVIEWS.md` for how to submit.
 
 ## Pull Request Process
 
