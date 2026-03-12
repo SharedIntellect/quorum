@@ -2,7 +2,7 @@
 # Used by tools/validate-docs.py to detect stale documentation.
 # Update this file FIRST when shipping a critic or feature.
 
-version: "0.7.0"
+version: "0.7.2"
 spec_version: "3.0"
 
 critics:

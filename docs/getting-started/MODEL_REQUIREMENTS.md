@@ -4,7 +4,7 @@ Quorum's critics need models that can reason about complex artifacts, follow str
 
 ## Tier System
 
-Quorum uses a two-tier architecture. **Tier 1** handles judgment-heavy roles (supervisor, aggregator, security critic). **Tier 2** handles pattern-matching roles (correctness, completeness, architecture critics). See [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) for which roles map to which tier.
+Quorum uses a two-tier architecture. **Tier 1** handles judgment-heavy roles (supervisor, aggregator, security critic). **Tier 2** handles pattern-matching roles (correctness, completeness, architecture critics). See [CONFIG_REFERENCE.md](../configuration/CONFIG_REFERENCE.md) for which roles map to which tier.
 
 ### Tier 1 — Recommended (Judgment Roles)
 
@@ -49,7 +49,7 @@ models:
   tier_2: anthropic/claude-sonnet-4-6    # Evaluation roles (correctness, completeness, architecture)
 ```
 
-For per-critic overrides, see [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md).
+For per-critic overrides, see [CONFIG_REFERENCE.md](../configuration/CONFIG_REFERENCE.md).
 
 **First-run behavior:** If no config exists, Quorum auto-detects your available model, asks two setup questions (preferred tier 1 and tier 2 models), writes the config, and proceeds immediately. Zero-config users get sensible defaults.
 

@@ -5,7 +5,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ba4c8.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/platform-OpenClaw-2ba4c8" alt="Platform: OpenClaw">
-  <img src="https://img.shields.io/badge/status-v0.7.0-2ba4c8" alt="Status: v0.7.0">
+  <img src="https://img.shields.io/badge/status-v0.7.2-2ba4c8" alt="Status: v0.7.2">
   <a href="https://clawhub.ai/dacervera/quorum"><img src="https://img.shields.io/badge/ClawHub-dacervera%2Fquorum-2ba4c8" alt="Available on ClawHub"></a>
 </p>
 

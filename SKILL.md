@@ -1,6 +1,6 @@
 ---
 name: quorum
-description: Multi-agent validation framework — 4 independent AI critics evaluate artifacts against rubrics with evidence-grounded findings.
+description: Multi-agent validation framework — 6 independent AI critics evaluate artifacts against rubrics with evidence-grounded findings.
 metadata: {"openclaw":{"requires":{"bins":["python3","pip"],"env":["ANTHROPIC_API_KEY","OPENAI_API_KEY"]},"install":[{"id":"clone-repo","kind":"shell","command":"git clone https://github.com/SharedIntellect/quorum.git /tmp/quorum-install && cd /tmp/quorum-install/reference-implementation && pip install -r requirements.txt","label":"Clone Quorum repo and install Python dependencies"}],"source":"https://github.com/SharedIntellect/quorum"}}
 ---
 

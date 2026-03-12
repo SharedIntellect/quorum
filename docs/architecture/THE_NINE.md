@@ -180,7 +180,7 @@ That's why there are nine.
 
 ---
 
-*The characters in this story correspond to the nine agents defined in the [Quorum Specification](../SPEC.md). Their behaviors, evidence requirements, and interaction patterns are real. The drama is only slightly exaggerated.*
+*The characters in this story correspond to the nine agents defined in the [Quorum Specification](../../SPEC.md). Their behaviors, evidence requirements, and interaction patterns are real. The drama is only slightly exaggerated.*
 
 ---
 
