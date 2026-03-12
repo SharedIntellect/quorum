@@ -1,5 +1,6 @@
 # Quick depth profile — fast feedback for low-stakes validation
 # Critics: correctness + completeness (2 critics, 0 fix loops)
+# Tester: skipped at quick depth
 # Use for: draft review, pre-commit checks, iterative development
 
 critics:

@@ -1,5 +1,6 @@
 # Standard depth profile — balanced rigor for most work
 # Critics: correctness + completeness + security (3 critics)
+# Tester: L1 (deterministic) verification active — zero API cost
 # Use for: PR reviews, config changes, research submissions
 
 critics:
