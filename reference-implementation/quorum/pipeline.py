@@ -14,7 +14,6 @@ Flow:
 
 from __future__ import annotations
 
-import asyncio
 import glob as glob_mod
 import hashlib
 import json
@@ -30,7 +29,7 @@ from quorum.agents.supervisor import SupervisorAgent
 from quorum.config import QuorumConfig
 from quorum.cost import BudgetExceededError, CostTracker
 from quorum.learning import LearningMemory
-from quorum.models import BatchVerdict, CriticResult, FileResult, FixProposal, Severity, Verdict, VerdictStatus
+from quorum.models import BatchVerdict, CriticResult, FileResult, FixProposal, Severity, TesterResult, Verdict, VerdictStatus
 from quorum.providers.litellm_provider import LiteLLMProvider
 from quorum.rubrics.loader import RubricLoader
 
@@ -258,6 +257,46 @@ def _run_phase2(
     return critic_results
 
 
+def _run_phase3(
+    config: QuorumConfig,
+    provider: object,
+    critic_results: list[CriticResult],
+    base_dir: Path,
+    run_dir: Path,
+) -> TesterResult | None:
+    """Run Phase 3 Tester verification if depth permits."""
+    from quorum.critics.tester import TesterCritic
+
+    if config.depth_profile == "quick":
+        return None
+
+    l2_enabled = config.depth_profile == "thorough"
+
+    tester = TesterCritic(
+        provider=provider if l2_enabled else None,
+        config=config if l2_enabled else None,
+        l2_enabled=l2_enabled,
+    )
+
+    tester_result = tester.verify(critic_results, base_dir)
+
+    # Save tester output
+    _write_json(
+        run_dir / "tester" / "verification-results.json",
+        tester_result.model_dump(),
+    )
+
+    logger.info(
+        "Phase 3 complete: %d verified, %d unverified, %d contradicted (%dms)",
+        tester_result.verified_count,
+        tester_result.unverified_count,
+        tester_result.contradicted_count,
+        tester_result.runtime_ms,
+    )
+
+    return tester_result
+
+
 def _update_manifest(
     run_dir: Path,
     config: QuorumConfig,
@@ -268,6 +307,7 @@ def _update_manifest(
     learning_stats: dict | None = None,
     cost_summary: dict | None = None,
     artifact_sha256: str | None = None,
+    tester_result: TesterResult | None = None,
 ) -> None:
     """Update run manifest with final stats."""
     prescreen_stats: dict = {"prescreen_enabled": config.enable_prescreen}
@@ -294,14 +334,22 @@ def _update_manifest(
             from quorum.relationships import load_manifest
             rels = load_manifest(relationships_path)
             manifest_data["relationships_count"] = len(rels)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Could not count relationships for manifest: %s", e)
     if learning_stats:
         manifest_data["learning"] = learning_stats
     if cost_summary:
         manifest_data["cost"] = cost_summary
     if artifact_sha256:
         manifest_data["artifact_sha256"] = artifact_sha256
+    if tester_result:
+        manifest_data["tester"] = {
+            "verified": tester_result.verified_count,
+            "unverified": tester_result.unverified_count,
+            "contradicted": tester_result.contradicted_count,
+            "verification_rate": tester_result.verification_rate,
+            "runtime_ms": tester_result.runtime_ms,
+        }
     _write_json(manifest_path, manifest_data)
 
 
@@ -523,19 +571,25 @@ def run_validation(
                 config, provider, critic_results, relationships_path, run_dir,
             )
         except Exception as e:
-            if isinstance(e, asyncio.CancelledError):
-                raise
             logger.error("Phase 2 (cross-artifact) failed: %s", e)
             # Non-fatal: Phase 1 results are still valid and aggregator will proceed
+
+    # Phase 3: Tester verification (standard + thorough depth)
+    tester_result = None
+    try:
+        tester_result = _run_phase3(
+            config, provider, critic_results, target.parent.resolve(), run_dir,
+        )
+    except Exception as e:
+        logger.error("Phase 3 (tester) failed: %s", e)
+        # Non-fatal: aggregator proceeds without tester data
 
     # Run aggregator → verdict
     # V007 fix: guard aggregator crash so partial results are still saved
     aggregator = AggregatorAgent(provider=provider, config=config)
     try:
-        verdict = aggregator.run(critic_results)
+        verdict = aggregator.run(critic_results, tester_result=tester_result)
     except Exception as e:
-        if isinstance(e, asyncio.CancelledError):
-            raise
         logger.error("Aggregator failed: %s", e)
         verdict = Verdict(
             status=VerdictStatus.REJECT,
@@ -546,7 +600,7 @@ def run_validation(
 
     # Save outputs and update manifest
     _write_json(run_dir / "verdict.json", verdict.model_dump())
-    _write_report(run_dir / "report.md", verdict, target, rubric, config, fix_report=fix_report)
+    _write_report(run_dir / "report.md", verdict, target, rubric, config, fix_report=fix_report, tester_result=tester_result)
 
     # Update learning memory with findings from this run
     learning_stats: dict = {}
@@ -585,6 +639,7 @@ def run_validation(
         run_dir, config, prescreen_result, verdict, critic_results,
         relationships_path, learning_stats, cost_summary_dict,
         artifact_sha256=artifact_sha256,
+        tester_result=tester_result,
     )
 
     run_end = datetime.now(timezone.utc)
@@ -1598,6 +1653,7 @@ def _write_report(
     rubric,
     config: QuorumConfig,
     fix_report=None,
+    tester_result: TesterResult | None = None,
 ) -> None:
     """Write a Markdown validation report."""
 
@@ -1660,6 +1716,46 @@ def _write_report(
             ]
             for reason in fix_report.skip_reasons:
                 lines.append(f"- {reason}")
+            lines.append("")
+
+    if tester_result is not None:
+        from quorum.models import VerificationStatus
+
+        l1_contradicted = sum(
+            1 for vr in tester_result.verification_results
+            if vr.status == VerificationStatus.CONTRADICTED and vr.level == 1
+        )
+        l2_contradicted = sum(
+            1 for vr in tester_result.verification_results
+            if vr.status == VerificationStatus.CONTRADICTED and vr.level == 2
+        )
+        verification_rate_pct = f"{tester_result.verification_rate:.0%}"
+
+        lines += [
+            "---",
+            "",
+            "## Verification (Tester)",
+            "",
+            "| Metric | Count |",
+            "|--------|-------|",
+            f"| Verified | {tester_result.verified_count} |",
+            f"| Unverified | {tester_result.unverified_count} |",
+            f"| Contradicted (L1, auto-excluded) | {l1_contradicted} |",
+            f"| Contradicted (L2, annotated) | {l2_contradicted} |",
+            f"| **Verification Rate** | {verification_rate_pct} |",
+            "",
+        ]
+
+        if l1_contradicted > 0:
+            lines += [
+                "### Excluded Findings (L1 Contradicted)",
+                "",
+            ]
+            for vr in tester_result.verification_results:
+                if vr.status == VerificationStatus.CONTRADICTED and vr.level == 1:
+                    lines.append(
+                        f"- {vr.original_finding_id}: {vr.explanation}"
+                    )
             lines.append("")
 
     if report:

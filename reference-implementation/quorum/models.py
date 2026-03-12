@@ -125,6 +125,8 @@ class AggregatedReport(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     conflicts_resolved: int = Field(default=0)
     critic_results: list[CriticResult] = Field(default_factory=list)
+    tester_result: Optional["TesterResult"] = None
+    l1_excluded_count: int = Field(default=0, description="Findings excluded by Tester L1 contradictions")
 
     @property
     def critical_count(self) -> int:

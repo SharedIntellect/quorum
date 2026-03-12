@@ -28,8 +28,10 @@ from quorum.models import (
     CriticResult,
     Finding,
     Severity,
+    TesterResult,
     Verdict,
     VerdictStatus,
+    VerificationStatus,
 )
 from quorum.providers.base import BaseProvider
 
@@ -52,17 +54,26 @@ class AggregatorAgent:
         self.provider = provider
         self.config = config
 
-    def run(self, critic_results: list[CriticResult]) -> Verdict:
+    def run(self, critic_results: list[CriticResult], tester_result: TesterResult | None = None) -> Verdict:
         """
         Main entry point.
 
         Args:
             critic_results: List of CriticResult from each critic
+            tester_result:  Optional TesterResult from Phase 3 verification
 
         Returns:
             Final Verdict with AggregatedReport attached
         """
         all_findings = self._collect_findings(critic_results)
+
+        # DEC-020: Apply tester results before deduplication
+        l1_excluded_count = 0
+        if tester_result is not None:
+            all_findings, l1_excluded_count = self._apply_tester_results(
+                all_findings, tester_result,
+            )
+
         deduped_findings, conflicts_resolved = self._deduplicate(all_findings)
         confidence = self._calculate_confidence(critic_results, deduped_findings)
 
@@ -71,15 +82,71 @@ class AggregatorAgent:
             confidence=confidence,
             conflicts_resolved=conflicts_resolved,
             critic_results=critic_results,
+            tester_result=tester_result,
+            l1_excluded_count=l1_excluded_count,
         )
 
-        verdict = self._assign_verdict(report)
+        verdict = self._assign_verdict(report, l1_excluded_count=l1_excluded_count)
         logger.info(
             "Aggregator: %d findings → %d deduped → verdict=%s (confidence=%.2f)",
             len(all_findings), len(deduped_findings), verdict.status.value, confidence,
         )
+        if l1_excluded_count > 0:
+            logger.info(
+                "Aggregator: %d finding(s) excluded by Tester (L1 contradicted)",
+                l1_excluded_count,
+            )
 
         return verdict
+
+    def _apply_tester_results(
+        self,
+        findings: list[Finding],
+        tester_result: TesterResult,
+    ) -> tuple[list[Finding], int]:
+        """Apply DEC-020: auto-exclude L1 contradictions, annotate L2 contradictions.
+
+        Returns (filtered_findings, l1_excluded_count).
+        """
+        # Build mapping: finding_id → VerificationResult
+        verification_map = {
+            vr.original_finding_id: vr
+            for vr in tester_result.verification_results
+        }
+
+        filtered: list[Finding] = []
+        l1_excluded = 0
+
+        for finding in findings:
+            vr = verification_map.get(finding.id)
+            if vr is None:
+                filtered.append(finding)
+                continue
+
+            if vr.status == VerificationStatus.CONTRADICTED and vr.level == 1:
+                # L1 CONTRADICTED: auto-exclude from verdict
+                l1_excluded += 1
+                logger.debug(
+                    "DEC-020: Excluding finding %s (L1 contradicted): %s",
+                    finding.id, vr.explanation,
+                )
+                continue
+
+            if vr.status == VerificationStatus.CONTRADICTED and vr.level == 2:
+                # L2 CONTRADICTED: annotate only, keep in verdict
+                annotated = finding.model_copy(
+                    update={"description": f"[L2-CONTRADICTED] {finding.description}"}
+                )
+                filtered.append(annotated)
+                logger.debug(
+                    "DEC-020: Annotating finding %s (L2 contradicted): %s",
+                    finding.id, vr.explanation,
+                )
+                continue
+
+            filtered.append(finding)
+
+        return filtered, l1_excluded
 
     def _collect_findings(self, results: list[CriticResult]) -> list[Finding]:
         """Flatten all findings from all critics into a single list."""
@@ -168,7 +235,7 @@ class AggregatorAgent:
 
         return round(evaluated_criteria / total_criteria, 3)
 
-    def _assign_verdict(self, report: AggregatedReport) -> Verdict:
+    def _assign_verdict(self, report: AggregatedReport, l1_excluded_count: int = 0) -> Verdict:
         """
         Deterministic verdict assignment based on findings severity.
 
@@ -221,6 +288,9 @@ class AggregatorAgent:
 
         if counts:
             reasoning += f" Issues: {', '.join(counts)}."
+
+        if l1_excluded_count > 0:
+            reasoning += f" {l1_excluded_count} finding(s) excluded by Tester (L1 contradicted)."
 
         return Verdict(
             status=status,

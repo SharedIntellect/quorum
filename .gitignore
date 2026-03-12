@@ -3,3 +3,5 @@ ports/
 __pycache__/
 .pytest_cache/
 .hypothesis/
+.DS_Store
+quorum-runs/

@@ -1,5 +1,6 @@
 # Thorough depth profile — maximum rigor for critical decisions
 # Critics: all 4 implemented critics (correctness, completeness, security, code_hygiene)
+# Tester: L1 + L2 (LLM claim check) verification active
 # Use for: production releases, security review, compliance artifacts
 # Add --relationships for cross-artifact consistency (Phase 2)
 

@@ -2,7 +2,7 @@
 # Used by tools/validate-docs.py to detect stale documentation.
 # Update this file FIRST when shipping a critic or feature.
 
-version: "0.6.1"
+version: "0.7.0"
 spec_version: "3.0"
 
 critics:
@@ -34,10 +34,13 @@ critics:
     note: "Activated with --relationships flag; not part of default depth panel"
   tester:
     status: shipped
-    callable: false
+    callable: true
     since: "0.6.0"
     description: "Finding verification — L1 deterministic + L2 LLM claim checking"
-    note: "Code and tests shipped; not yet wired into pipeline (not in CRITIC_REGISTRY or depth configs)"
+    note: "Phase 3 in pipeline. L1 at standard depth, L1+L2 at thorough. Quick: skipped."
+    depth_configs:
+      - standard
+      - thorough
   architecture:
     status: planned
     callable: false
