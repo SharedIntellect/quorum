@@ -27,6 +27,9 @@ except ImportError:
 # Maximum file size to process (1 MB) — guards against oversized files in regex operations
 MAX_FILE_SIZE_BYTES = 1_048_576
 
+# Maximum characters displayed per line in finding messages
+MAX_LINE_DISPLAY_CHARS = 120
+
 
 def load_manifest(repo_root: Path) -> dict[str, Any]:
     """Load and parse critic-status.yaml with structural validation."""
@@ -146,7 +149,7 @@ def check_hardcoded_counts(lines: list[str], shipped_count: int, file_path: Path
                     findings.append(
                         f"  {file_path}:{i}: Remove target denominator "
                         f"(policy: don't expose total planned count): "
-                        f"{line.strip()[:120]}"
+                        f"{line.strip()[:MAX_LINE_DISPLAY_CHARS]}"
                     )
                     fraction_found = True
 
@@ -166,7 +169,7 @@ def check_hardcoded_counts(lines: list[str], shipped_count: int, file_path: Path
                     ]):
                         findings.append(
                             f"  {file_path}:{i}: Hardcoded count '{match.group(0)}' "
-                            f"(shipped={shipped_count}): {line.strip()[:120]}"
+                            f"(shipped={shipped_count}): {line.strip()[:MAX_LINE_DISPLAY_CHARS]}"
                         )
     return findings
 
@@ -203,13 +206,16 @@ def check_stale_status_markers(
             name.replace("_", "[ _-]?"): name
             for name in distinctive_shipped
         }
-        for pattern_name, canonical_name in list(distinctive_names.items()) + [
+        # Filter display_map to only include aliases for actually-shipped critics
+        shipped_display_entries = [
             (k, v) for k, v in display_map.items()
-        ]:
+            if v in shipped_critics
+        ]
+        for pattern_name, canonical_name in list(distinctive_names.items()) + shipped_display_entries:
             if re.search(pattern_name, line_lower) or canonical_name.replace("_", " ") in line_lower:
                 findings.append(
                     f"  {file_path}:{i}: Stale marker for shipped critic "
-                    f"'{canonical_name}': {line.strip()[:120]}"
+                    f"'{canonical_name}': {line.strip()[:MAX_LINE_DISPLAY_CHARS]}"
                 )
                 break
 
@@ -243,7 +249,7 @@ def check_roadmap_shipped(
                 if critic_name in line_lower:
                     findings.append(
                         f"  {file_path}:{i}: Shipped critic '{critic_name}' listed in "
-                        f"roadmap/coming section: {line.strip()[:120]}"
+                        f"roadmap/coming section: {line.strip()[:MAX_LINE_DISPLAY_CHARS]}"
                     )
                     break
 
@@ -319,7 +325,7 @@ def check_depth_config_claims(
                     findings.append(
                         f"  {file_path}:{i}: {depth_name} depth claims "
                         f"{claimed} critics (actual={actual}): "
-                        f"{line.strip()[:120]}"
+                        f"{line.strip()[:MAX_LINE_DISPLAY_CHARS]}"
                     )
 
     return findings

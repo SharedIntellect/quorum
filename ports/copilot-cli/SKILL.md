@@ -1,6 +1,7 @@
 ---
 description: Multi-critic quality validation — correctness, completeness, security, code hygiene, cross-consistency
 model: claude-opus-4-6
+version: 0.7.0
 ---
 
 # Quorum Validation Skill
@@ -81,13 +82,29 @@ At **standard depth**, dispatch these 4 critics in parallel as `task` agents:
 | **security** | `critics/security.agent.md` | Framework-grounded security analysis (OWASP ASVS 5.0, CWE Top 25, NIST SA-11) |
 | **code_hygiene** | `critics/code-hygiene.agent.md` | Structural code quality (ISO 25010/5055, maintainability, reliability) |
 
-**Request Sonnet (Tier 2) model for each critic task agent.** You (the orchestrator) run on Opus (Tier 1) for aggregation and verdict assignment.
+**Model assignment:** Each critic task agent MUST use `model: claude-sonnet-4-20250514` (Tier 2). You (the orchestrator) run on Opus (Tier 1) for aggregation and verdict assignment. When dispatching via `task`, set the model explicitly — do not rely on the default.
+
+**Timeout:** Each critic task agent has a **120-second timeout**. If a critic has not returned a response within 120 seconds, consider it timed out and handle per section 12.
+
+**Token limits:** Set `max_tokens: 4096` for each critic task agent response. This is sufficient for findings JSON. The orchestrator's own responses are uncapped.
+
+**Acceptance criteria for critic delegations:** A critic response is considered successful ONLY if ALL of the following are true:
+1. The response is valid JSON matching FINDINGS_SCHEMA.
+2. Every finding in the response has non-empty `evidence_tool` or `evidence_result` (per section 9).
+3. The critic has addressed at least one rubric criterion (either by reporting a finding against it or by the absence of findings implying evaluation occurred).
+
+A response of `{"findings": []}` is valid ONLY if it is accompanied by a brief confirmation that the critic evaluated the artifact and found no issues. If a critic returns empty findings with no evaluation statement, treat it as a failed critic (not "no issues found") and note this in the coverage summary.
 
 Launch all 4 critics simultaneously. Do not wait for one to finish before starting the next.
 
 ### Inline Critic: Security
 
-If `critics/security.agent.md` does not exist, use this system prompt for the security critic:
+If `critics/security.agent.md` does not exist, use this system prompt for the security critic.
+
+**Model:** `claude-sonnet-4-20250514` (Tier 2). Set explicitly when dispatching.
+**Timeout:** 120 seconds.
+**Max tokens:** 4096.
+**Error handling:** If the artifact exceeds your context window, evaluate only the first portion you can fit and note "PARTIAL EVALUATION: artifact truncated at line N" in your first finding's description. If the LLM call fails or returns a malformed response, return `{"findings": [{"severity": "INFO", "description": "Security critic encountered an error: {error_description}", "evidence_tool": "internal", "evidence_result": "Critic execution failure — manual security review recommended."}]}`.
 
 > You are the Security Critic for Quorum, a rigorous quality validation system.
 >
@@ -105,7 +122,12 @@ If `critics/security.agent.md` does not exist, use this system prompt for the se
 
 ### Inline Critic: Code Hygiene
 
-If `critics/code-hygiene.agent.md` does not exist, use this system prompt for the code hygiene critic:
+If `critics/code-hygiene.agent.md` does not exist, use this system prompt for the code hygiene critic.
+
+**Model:** `claude-sonnet-4-20250514` (Tier 2). Set explicitly when dispatching.
+**Timeout:** 120 seconds.
+**Max tokens:** 4096.
+**Error handling:** If the artifact exceeds your context window, evaluate only the first portion you can fit and note "PARTIAL EVALUATION: artifact truncated at line N" in your first finding's description. If the LLM call fails or returns a malformed response, return `{"findings": [{"severity": "INFO", "description": "Code hygiene critic encountered an error: {error_description}", "evidence_tool": "internal", "evidence_result": "Critic execution failure — manual code review recommended."}]}`.
 
 > You are the Code Hygiene Critic for Quorum, a rigorous quality validation system.
 >
@@ -330,7 +352,8 @@ If the user provides **two files** and asks for cross-consistency validation (e.
 
 1. Still run pre-screen on both files individually.
 2. Instead of the standard 4-critic dispatch, dispatch a single **cross-consistency critic** as a `task` agent.
-3. If `critics/cross-consistency.agent.md` exists, use its system prompt. Otherwise, use this inline prompt:
+3. **Model:** `claude-sonnet-4-20250514` (Tier 2). Set explicitly when dispatching. **Timeout:** 120 seconds. **Max tokens:** 4096. **Error handling:** Same as inline critics in section 4 — on context overflow, note partial evaluation; on failure, return a structured INFO finding recommending manual review.
+4. If `critics/cross-consistency.agent.md` exists, use its system prompt. Otherwise, use this inline prompt:
 
 > You are the Cross-Consistency Critic for Quorum, a rigorous quality validation system.
 >
@@ -345,7 +368,7 @@ If the user provides **two files** and asks for cross-consistency validation (e.
 >
 > Critical rule: EVERY finding must include direct quotes from BOTH artifacts showing the inconsistency. Findings with evidence from only one artifact will be rejected.
 
-4. The prompt template for cross-consistency includes both artifacts:
+5. The prompt template for cross-consistency includes both artifacts:
 
 ```
 ## Artifact A (Primary)
@@ -380,7 +403,7 @@ Evaluate the consistency between Artifact A and Artifact B. For each inconsisten
 Respond ONLY with JSON matching the FINDINGS_SCHEMA.
 ```
 
-5. Apply the same verdict rules (section 7) and report format (section 8) to the cross-consistency findings.
+6. Apply the same verdict rules (section 7) and report format (section 8) to the cross-consistency findings.
 
 ---
 
@@ -409,6 +432,6 @@ Handle these failure modes gracefully:
 | Pre-screen script not found | Warn the user. Proceed without pre-screen data. |
 | Pre-screen script crashes | Log stderr. Proceed without pre-screen data. |
 | Rubric file not found | Warn the user. Proceed with no rubric criteria (critics will still evaluate based on their system prompt). |
-| Critic task agent times out | Log the timeout. Include "ERROR: timeout" in that critic's coverage summary row. Continue with remaining critics. |
+| Critic task agent times out (>120s) | Log the timeout. Include "ERROR: timeout after 120s" in that critic's coverage summary row. Continue with remaining critics. |
 | Critic returns invalid JSON | Attempt to extract findings from the response text. If that fails, log the error and mark the critic as failed in coverage summary. |
 | All critics fail | Report verdict as **PASS** with a prominent warning: "All critics failed. This PASS verdict reflects no evaluation, not confirmed quality. Re-run recommended." |

@@ -13,7 +13,13 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 from enum import Enum
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
+
+# Maximum file size for compute_hash (50 MB)
+_MAX_HASH_FILE_SIZE = 50 * 1024 * 1024
+
+# Display limits
+_MAX_DISPLAYED_LOCATIONS = 10
 
 
 class Severity(str, Enum):
@@ -39,10 +45,28 @@ class Locus(BaseModel):
     role: str = Field(description="Role in the relationship, e.g. 'implementation', 'specification', 'producer', 'consumer'")
     source_hash: str = Field(description="SHA-256 hex digest of raw file bytes at [start_line:end_line]")
 
+    @model_validator(mode="after")
+    def _validate_line_range(self) -> Locus:
+        if self.start_line > self.end_line:
+            raise ValueError(
+                f"start_line ({self.start_line}) must be <= end_line ({self.end_line})"
+            )
+        return self
+
     @staticmethod
     def compute_hash(file_path: str | Path, start_line: int, end_line: int) -> str:
-        """Compute SHA-256 of the raw bytes in the line range [start_line, end_line] (1-indexed, inclusive)."""
-        path = Path(file_path)
+        """Compute SHA-256 of the raw bytes in the line range [start_line, end_line] (1-indexed, inclusive).
+
+        Validates that the file is a regular file within size limits before reading.
+        """
+        path = Path(file_path).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"Not a regular file: {path.name}")
+        file_size = path.stat().st_size
+        if file_size > _MAX_HASH_FILE_SIZE:
+            raise ValueError(
+                f"File too large for hashing ({file_size} bytes, max {_MAX_HASH_FILE_SIZE})"
+            )
         raw = path.read_bytes()
         return Locus._hash_byte_range(raw, start_line, end_line)
 
@@ -54,7 +78,13 @@ class Locus(BaseModel):
 
     @staticmethod
     def _hash_byte_range(raw: bytes, start_line: int, end_line: int) -> str:
-        """Hash the raw bytes in the given line range. Shared by both compute_hash methods."""
+        """Hash the raw bytes in the given line range. Shared by both compute_hash methods.
+
+        Raises ValueError if the requested range produces an empty segment
+        (out-of-bounds or reversed).
+        """
+        if start_line > end_line:
+            raise ValueError(f"start_line ({start_line}) must be <= end_line ({end_line})")
         lines = raw.split(b"\n")
         # Re-attach newlines (split removes them); last line may not have trailing newline
         lines_with_endings = [line + b"\n" for line in lines[:-1]]
@@ -64,6 +94,11 @@ class Locus(BaseModel):
         start_idx = max(0, start_line - 1)
         end_idx = min(len(lines_with_endings), end_line)
         segment = b"".join(lines_with_endings[start_idx:end_idx])
+        if not segment and lines_with_endings:
+            raise ValueError(
+                f"Line range [{start_line}:{end_line}] is out of bounds "
+                f"(file has {len(lines_with_endings)} lines)"
+            )
         return hashlib.sha256(segment).hexdigest()
 
 
@@ -261,9 +296,9 @@ class PreScreenResult(BaseModel):
                     f"(severity={check.severity.value}): {check.description}"
                 )
                 if check.locations:
-                    locs = ", ".join(check.locations[:10])
-                    if len(check.locations) > 10:
-                        locs += f" … (+{len(check.locations) - 10} more)"
+                    locs = ", ".join(check.locations[:_MAX_DISPLAYED_LOCATIONS])
+                    if len(check.locations) > _MAX_DISPLAYED_LOCATIONS:
+                        locs += f" … (+{len(check.locations) - _MAX_DISPLAYED_LOCATIONS} more)"
                     lines.append(f"  Locations: {locs}")
                 if check.evidence:
                     preview = check.evidence[:400].replace("\n", " ↵ ")
@@ -313,8 +348,8 @@ class VerificationResult(BaseModel):
 class VerifiedLocus(BaseModel):
     """Actual content found at a cited file location during verification."""
     file_path: str = Field(description="Path to the file that was read")
-    line_start: Optional[int] = Field(default=None, description="1-indexed start line read")
-    line_end: Optional[int] = Field(default=None, description="1-indexed end line read")
+    line_start: Optional[int] = Field(default=None, ge=1, description="1-indexed start line read")
+    line_end: Optional[int] = Field(default=None, ge=1, description="1-indexed end line read")
     actual_content: str = Field(description="The real content found at this location")
     similarity_score: float = Field(
         default=0.0,
@@ -322,6 +357,17 @@ class VerifiedLocus(BaseModel):
         le=1.0,
         description="Fuzzy match score between cited and actual content",
     )
+
+    @model_validator(mode="after")
+    def _validate_line_range(self) -> VerifiedLocus:
+        if (self.line_start is None) != (self.line_end is None):
+            raise ValueError("line_start and line_end must both be set or both be None")
+        if self.line_start is not None and self.line_end is not None:
+            if self.line_start > self.line_end:
+                raise ValueError(
+                    f"line_start ({self.line_start}) must be <= line_end ({self.line_end})"
+                )
+        return self
 
 
 class TesterResult(BaseModel):
@@ -332,6 +378,18 @@ class TesterResult(BaseModel):
     unverified_count: int = Field(default=0)
     contradicted_count: int = Field(default=0)
     runtime_ms: int = Field(default=0)
+
+    @model_validator(mode="after")
+    def _validate_counts(self) -> TesterResult:
+        count_sum = self.verified_count + self.unverified_count + self.contradicted_count
+        if self.total_findings > 0 and count_sum != self.total_findings:
+            raise ValueError(
+                f"Count mismatch: verified ({self.verified_count}) + "
+                f"unverified ({self.unverified_count}) + "
+                f"contradicted ({self.contradicted_count}) = {count_sum}, "
+                f"but total_findings = {self.total_findings}"
+            )
+        return self
 
     @property
     def verification_rate(self) -> float:

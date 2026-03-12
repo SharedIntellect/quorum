@@ -20,7 +20,7 @@ import json
 import logging
 import signal
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,7 +29,7 @@ from quorum.agents.supervisor import SupervisorAgent
 from quorum.config import QuorumConfig
 from quorum.cost import BudgetExceededError, CostTracker
 from quorum.learning import LearningMemory
-from quorum.models import BatchVerdict, CriticResult, FileResult, FixProposal, Severity, TesterResult, Verdict, VerdictStatus
+from quorum.models import BatchVerdict, CriticResult, FileResult, FixProposal, PreScreenResult, Severity, TesterResult, Verdict, VerdictStatus
 from quorum.providers.litellm_provider import LiteLLMProvider
 from quorum.rubrics.loader import RubricLoader
 
@@ -90,8 +90,8 @@ def apply_fix_proposals(
 def _revalidate_with_critics(
     modified_text: str,
     blocking_findings: list,
-    provider: object,
-    config: "QuorumConfig",
+    provider: LiteLLMProvider,
+    config: QuorumConfig,
     rubric: object,
 ) -> tuple[list[CriticResult], str, str]:
     """
@@ -199,7 +199,7 @@ def _run_prescreen(
     target: Path,
     artifact_text: str,
     run_dir: Path,
-) -> "object | None":
+) -> "PreScreenResult | None":
     """Run deterministic pre-screen if enabled. Returns PreScreenResult or None."""
     if not config.enable_prescreen:
         return None
@@ -215,13 +215,13 @@ def _run_prescreen(
         return result
     except Exception as e:
         # V004 fix: pre-screen failure should not kill the entire validation run
-        logger.warning("Pre-screen failed, continuing without: %s", e)
+        logger.warning("Pre-screen failed, continuing without: %s", e, exc_info=True)
         return None
 
 
 def _run_phase2(
     config: QuorumConfig,
-    provider: object,
+    provider: LiteLLMProvider,
     critic_results: list,
     relationships_path: Path,
     run_dir: Path,
@@ -259,7 +259,7 @@ def _run_phase2(
 
 def _run_phase3(
     config: QuorumConfig,
-    provider: object,
+    provider: LiteLLMProvider | None,
     critic_results: list[CriticResult],
     base_dir: Path,
     run_dir: Path,
@@ -335,7 +335,7 @@ def _update_manifest(
             rels = load_manifest(relationships_path)
             manifest_data["relationships_count"] = len(rels)
         except Exception as e:
-            logger.debug("Could not count relationships for manifest: %s", e)
+            logger.warning("Could not count relationships for manifest: %s", e)
     if learning_stats:
         manifest_data["learning"] = learning_stats
     if cost_summary:
@@ -571,7 +571,7 @@ def run_validation(
                 config, provider, critic_results, relationships_path, run_dir,
             )
         except Exception as e:
-            logger.error("Phase 2 (cross-artifact) failed: %s", e)
+            logger.error("Phase 2 (cross-artifact) failed: %s", e, exc_info=True)
             # Non-fatal: Phase 1 results are still valid and aggregator will proceed
 
     # Phase 3: Tester verification (standard + thorough depth)
@@ -581,7 +581,7 @@ def run_validation(
             config, provider, critic_results, target.parent.resolve(), run_dir,
         )
     except Exception as e:
-        logger.error("Phase 3 (tester) failed: %s", e)
+        logger.error("Phase 3 (tester) failed: %s", e, exc_info=True)
         # Non-fatal: aggregator proceeds without tester data
 
     # Run aggregator → verdict
@@ -590,7 +590,7 @@ def run_validation(
     try:
         verdict = aggregator.run(critic_results, tester_result=tester_result)
     except Exception as e:
-        logger.error("Aggregator failed: %s", e)
+        logger.error("Aggregator failed: %s", e, exc_info=True)
         verdict = Verdict(
             status=VerdictStatus.REJECT,
             reasoning=f"Aggregator failed: {e}. Critic results were saved individually.",
@@ -1006,7 +1006,7 @@ def run_batch_validation(
 
     # Multi-file batch
     base_runs_dir = runs_dir or DEFAULT_RUNS_DIR
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     batch_dir = base_runs_dir / f"batch-{timestamp}"
     batch_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1017,11 +1017,14 @@ def run_batch_validation(
     batch_cost_tracker = CostTracker()
 
     # Write initial manifest immediately so a crash after this point is resumable
+    # Persist config + relationships so resume can reconstruct the original run parameters
     _write_json_atomic(batch_dir / "batch-manifest.json", {
         "target": str(target),
         "pattern": pattern,
         "depth": depth,
         "rubric": rubric_name,
+        "config": config.model_dump() if config else None,
+        "relationships_path": str(relationships_path) if relationships_path else None,
         "total_files": len(files),
         "validated": 0,
         "errors": 0,
@@ -1075,8 +1078,12 @@ def run_batch_validation(
                 for i, file_path in enumerate(files, 1)
             }
             for future in as_completed(futures, timeout=3600):  # 1 hour max
-                result = future.result()
                 file_path = futures[future]
+                try:
+                    result = future.result()
+                except CancelledError:
+                    logger.debug("Future for %s was cancelled", file_path)
+                    continue
 
                 with _manifest_lock:
                     if isinstance(result, FileResult):
@@ -1270,6 +1277,12 @@ def resume_batch_validation(
     rubric_name = manifest.get("rubric")
     batch_started = manifest.get("started_at", datetime.now(timezone.utc).isoformat())
 
+    # Restore original config and relationships from manifest (persisted since v0.6.1+)
+    saved_config = manifest.get("config")
+    config = QuorumConfig.model_validate(saved_config) if saved_config else None
+    saved_rel_path = manifest.get("relationships_path")
+    relationships_path = Path(saved_rel_path) if saved_rel_path else None
+
     if not target:
         raise ValueError(f"batch-manifest.json missing 'target' field in {batch_dir}")
 
@@ -1363,14 +1376,18 @@ def resume_batch_validation(
                     executor.submit(
                         _validate_one_file,
                         file_path, i + already_done, len(all_files),
-                        depth, rubric_name, None,
-                        batch_dir / "per-file", None,
+                        depth, rubric_name, config,
+                        batch_dir / "per-file", relationships_path,
                     ): file_path
                     for i, file_path in enumerate(remaining_files, 1)
                 }
                 for future in as_completed(futures, timeout=3600):
-                    result = future.result()
                     file_path = futures[future]
+                    try:
+                        result = future.result()
+                    except CancelledError:
+                        logger.debug("Future for %s was cancelled", file_path)
+                        continue
 
                     with _manifest_lock:
                         if isinstance(result, FileResult):

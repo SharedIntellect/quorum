@@ -41,6 +41,16 @@ logger = logging.getLogger(__name__)
 # Findings with description similarity above this are considered duplicates
 DEDUP_THRESHOLD = 0.72
 
+# Severity ordering for deduplication (higher = more severe)
+# Used to keep the highest-severity finding when duplicates are detected
+SEVERITY_ORDER = {
+    Severity.CRITICAL: 5,
+    Severity.HIGH: 4,
+    Severity.MEDIUM: 3,
+    Severity.LOW: 2,
+    Severity.INFO: 1,
+}
+
 
 class AggregatorAgent:
     """
@@ -153,7 +163,14 @@ class AggregatorAgent:
         findings = []
         for result in results:
             if not result.skipped:
-                findings.extend(result.findings)
+                try:
+                    if result.findings:
+                        findings.extend(result.findings)
+                except (TypeError, AttributeError) as e:
+                    logger.warning(
+                        "Skipping malformed findings from critic '%s': %s",
+                        result.critic_name, e,
+                    )
         return findings
 
     def _similarity(self, a: str, b: str) -> float:
@@ -176,36 +193,33 @@ class AggregatorAgent:
         if not findings:
             return [], 0
 
+        # Sort by severity descending for deterministic dedup regardless of input order
+        sorted_findings = sorted(
+            findings,
+            key=lambda f: SEVERITY_ORDER.get(f.severity, 0),
+            reverse=True,
+        )
+
         kept: list[Finding] = []
         conflicts_resolved = 0
 
-        for candidate in findings:
+        for candidate in sorted_findings:
             is_duplicate = False
             for i, existing in enumerate(kept):
                 sim = self._similarity(candidate.description, existing.description)
                 if sim >= DEDUP_THRESHOLD:
                     is_duplicate = True
                     conflicts_resolved += 1
-                    # Keep the higher-severity finding
-                    severity_order = {
-                        Severity.CRITICAL: 5,
-                        Severity.HIGH: 4,
-                        Severity.MEDIUM: 3,
-                        Severity.LOW: 2,
-                        Severity.INFO: 1,
-                    }
-                    if severity_order[candidate.severity] > severity_order[existing.severity]:
-                        # Replace with the higher-severity version, preserving source info
-                        merged_source = f"{existing.critic},{candidate.critic}"
-                        kept[i] = candidate.model_copy(
-                            update={"critic": merged_source}
-                        )
-                    else:
-                        # Keep existing but note the additional critic source
-                        merged_source = f"{existing.critic},{candidate.critic}"
-                        kept[i] = existing.model_copy(
-                            update={"critic": merged_source}
-                        )
+                    # Keep the higher-severity finding, merge critic attribution
+                    winner = (
+                        candidate
+                        if SEVERITY_ORDER.get(candidate.severity, 0) > SEVERITY_ORDER.get(existing.severity, 0)
+                        else existing
+                    )
+                    merged_source = f"{existing.critic},{candidate.critic}"
+                    kept[i] = winner.model_copy(
+                        update={"critic": merged_source}
+                    )
                     break
 
             if not is_duplicate:
@@ -250,7 +264,8 @@ class AggregatorAgent:
         critical = [f for f in findings if f.severity == Severity.CRITICAL]
         high = [f for f in findings if f.severity == Severity.HIGH]
         medium = [f for f in findings if f.severity == Severity.MEDIUM]
-        low = [f for f in findings if f.severity in (Severity.LOW, Severity.INFO)]
+        low = [f for f in findings if f.severity == Severity.LOW]
+        info = [f for f in findings if f.severity == Severity.INFO]
 
         if critical:
             status = VerdictStatus.REJECT
@@ -272,8 +287,15 @@ class AggregatorAgent:
                 f"No blocking issues found; recommendations are advisory."
             )
         else:
+            # INFO-only or no findings → PASS
             status = VerdictStatus.PASS
-            reasoning = "No issues found. The artifact meets all evaluated criteria."
+            if info:
+                reasoning = (
+                    f"No actionable issues found. {len(info)} informational note(s) recorded. "
+                    f"The artifact meets all evaluated criteria."
+                )
+            else:
+                reasoning = "No issues found. The artifact meets all evaluated criteria."
 
         # Add summary counts to reasoning
         counts = []
@@ -285,6 +307,8 @@ class AggregatorAgent:
             counts.append(f"{len(medium)} MEDIUM")
         if low:
             counts.append(f"{len(low)} LOW")
+        if info:
+            counts.append(f"{len(info)} INFO")
 
         if counts:
             reasoning += f" Issues: {', '.join(counts)}."

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Quorum Pre-Screen — Standalone stdlib-only pre-screen for Copilot CLI.
+"""Quorum Pre-Screen — Standalone pre-screen for Copilot CLI.
 
 Runs fast, LLM-free deterministic checks against an artifact file and
-outputs a JSON report to stdout.
+outputs a JSON report to stdout. Stdlib-first with optional PyYAML for
+YAML validation (degrades gracefully if unavailable).
 
 Checks (PS-001 through PS-010):
   security  — hardcoded paths, credentials, PII
@@ -36,6 +37,13 @@ except ImportError:
 
 # Maximum artifact size for pre-screen processing (10 MB)
 MAX_ARTIFACT_SIZE = 10 * 1024 * 1024
+
+# Display limits for evidence in findings
+MAX_EVIDENCE_LINES = 20
+MAX_EVIDENCE_DISPLAY_WIDTH = 120
+MAX_TODO_EVIDENCE_LINES = 30
+MAX_TRAILING_WS_SAMPLE = 10
+MAX_LINE_REPR_WIDTH = 80
 
 
 # ── Regex patterns ────────────────────────────────────────────────────────────
@@ -141,7 +149,7 @@ def _deduplicate_line_hits(
     return result
 
 
-def _redact(line: str, max_len: int = 120) -> str:
+def _redact(line: str, max_len: int = MAX_EVIDENCE_DISPLAY_WIDTH) -> str:
     """
     Partially redact a line that likely contains a secret, for safe logging.
     Replaces the second half of any token > 8 chars with asterisks.
@@ -223,10 +231,10 @@ def ps001_hardcoded_paths(artifact_path: Path, artifact_text: str) -> dict:
         )
 
     locations = [f"line {ln}" for ln, _ in hits]
-    evidence_lines = [f"  L{ln}: {line[:120]}" for ln, line in hits[:20]]
+    evidence_lines = [f"  L{ln}: {line[:MAX_EVIDENCE_DISPLAY_WIDTH]}" for ln, line in hits[:MAX_EVIDENCE_LINES]]
     evidence = f"Found {len(hits)} hardcoded path(s):\n" + "\n".join(evidence_lines)
-    if len(hits) > 20:
-        evidence += f"\n  ... and {len(hits) - 20} more"
+    if len(hits) > MAX_EVIDENCE_LINES:
+        evidence += f"\n  ... and {len(hits) - MAX_EVIDENCE_LINES} more"
 
     return _make_fail(
         "PS-001", "hardcoded_paths", "security",
@@ -259,7 +267,7 @@ def ps002_credentials(artifact_path: Path, artifact_text: str) -> dict:
         )
 
     locations = [f"line {ln}" for ln, _ in all_hits]
-    evidence_lines = [f"  L{ln}: {_redact(line)[:120]}" for ln, line in all_hits[:10]]
+    evidence_lines = [f"  L{ln}: {_redact(line)[:MAX_EVIDENCE_DISPLAY_WIDTH]}" for ln, line in all_hits[:MAX_EVIDENCE_LINES]]
     evidence = f"Found {len(all_hits)} potential credential pattern(s):\n" + "\n".join(
         evidence_lines
     )
@@ -297,7 +305,7 @@ def ps003_pii(artifact_path: Path, artifact_text: str) -> dict:
         parts.append(f"{len(ssn_hits)} SSN-like pattern(s)")
 
     locations = [f"line {ln}" for ln, _ in all_hits]
-    evidence_lines = [f"  L{ln}: {_redact(line)[:120]}" for ln, line in all_hits[:10]]
+    evidence_lines = [f"  L{ln}: {_redact(line)[:MAX_EVIDENCE_DISPLAY_WIDTH]}" for ln, line in all_hits[:MAX_EVIDENCE_LINES]]
     evidence = f"PII detected — {', '.join(parts)}:\n" + "\n".join(evidence_lines)
 
     return _make_fail(
@@ -383,11 +391,11 @@ def ps006_python_syntax(artifact_path: Path, artifact_text: str) -> dict:
             msg, [loc] if loc_match else [],
         )
 
-    except Exception as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         return _make_skip(
             "PS-006", "python_syntax", "syntax",
             "Python syntax check",
-            f"Could not compile: {exc}",
+            f"Could not compile ({type(exc).__name__}): {exc}",
         )
 
     finally:
@@ -413,11 +421,6 @@ def ps007_broken_md_links(artifact_path: Path, artifact_text: str) -> dict:
             if not path_part:
                 continue  # anchor-only link
             resolved = (base_dir / path_part).resolve()
-            # Skip links that escape artifact directory
-            try:
-                resolved.relative_to(base_dir.resolve())
-            except ValueError:
-                continue  # path traversal — don't follow
             if not resolved.exists():
                 broken.append((i, match.group(1), target))
 
@@ -453,10 +456,10 @@ def ps008_todo_markers(artifact_path: Path, artifact_text: str) -> dict:
         )
 
     locations = [f"line {ln}" for ln, _ in hits]
-    evidence_lines = [f"  L{ln}: {line[:120]}" for ln, line in hits[:30]]
+    evidence_lines = [f"  L{ln}: {line[:MAX_EVIDENCE_DISPLAY_WIDTH]}" for ln, line in hits[:MAX_TODO_EVIDENCE_LINES]]
     evidence = f"{len(hits)} tech-debt marker(s):\n" + "\n".join(evidence_lines)
-    if len(hits) > 30:
-        evidence += f"\n  ... and {len(hits) - 30} more"
+    if len(hits) > MAX_TODO_EVIDENCE_LINES:
+        evidence += f"\n  ... and {len(hits) - MAX_TODO_EVIDENCE_LINES} more"
 
     return _make_fail(
         "PS-008", "todo_markers", "structure",
@@ -499,7 +502,7 @@ def ps009_whitespace(artifact_path: Path, artifact_text: str) -> dict:
         evidence += f"  - {issue}\n"
     if trailing_hits:
         sample = "\n".join(
-            f"  L{ln}: {repr(line[:80])}" for ln, line in trailing_hits[:10]
+            f"  L{ln}: {repr(line[:MAX_LINE_REPR_WIDTH])}" for ln, line in trailing_hits[:MAX_TRAILING_WS_SAMPLE]
         )
         evidence += f"Sample trailing-whitespace lines:\n{sample}"
 
@@ -514,7 +517,7 @@ def ps009_whitespace(artifact_path: Path, artifact_text: str) -> dict:
 
 def ps010_empty_file(artifact_path: Path, artifact_text: str) -> dict:
     """PS-010: Detect empty or near-empty files."""
-    size = artifact_path.stat().st_size if artifact_path.exists() else len(artifact_text)
+    size = len(artifact_text)
 
     if size == 0:
         return _make_fail(
@@ -537,58 +540,51 @@ def ps010_empty_file(artifact_path: Path, artifact_text: str) -> dict:
     )
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Empty result helper ───────────────────────────────────────────────────────
 
-def run_prescreen(target_path: Path) -> dict:
-    """Run all pre-screen checks against the target file and return result dict."""
+def _empty_result(target_path: Path, error: str) -> dict:
+    """Return an empty result dict with an error message."""
+    return {
+        "target": str(target_path),
+        "total_checks": 0,
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "checks": [],
+        "error": error,
+    }
+
+
+# ── Input validation ──────────────────────────────────────────────────────────
+
+def _validate_input(target_path: Path) -> str | None:
+    """
+    Validate the target path is a readable regular file within size limits.
+
+    Returns None if valid, or an error message string if invalid.
+    """
     if not target_path.exists():
-        print(f"Error: file not found: {target_path}", file=sys.stderr)
-        sys.exit(1)
+        return f"File not found: {target_path.name}"
 
-    # ── Input validation (size check before read to prevent memory exhaustion) ─
+    if not target_path.is_file():
+        return f"Not a regular file: {target_path.name}"
+
     file_size = target_path.stat().st_size
     if file_size > MAX_ARTIFACT_SIZE:
-        print(
-            f"Error: artifact too large ({file_size} bytes), max {MAX_ARTIFACT_SIZE}",
-            file=sys.stderr,
-        )
-        return {
-            "target": str(target_path),
-            "total_checks": 0,
-            "passed": 0,
-            "failed": 0,
-            "skipped": 0,
-            "checks": [],
-        }
+        return f"Artifact too large ({file_size} bytes, max {MAX_ARTIFACT_SIZE})"
 
-    artifact_text = target_path.read_text(encoding="utf-8", errors="replace")
-    ext = target_path.suffix.lower()
+    return None
+
+
+# ── Check collection ──────────────────────────────────────────────────────────
+
+def _collect_checks(
+    target_path: Path,
+    artifact_text: str,
+    ext: str,
+) -> list[dict]:
+    """Dispatch all checks based on file extension and return results."""
     checks: list[dict] = []
-
-    if len(artifact_text) > MAX_ARTIFACT_SIZE:
-        print(
-            f"Error: artifact too large ({len(artifact_text)} bytes), max {MAX_ARTIFACT_SIZE}",
-            file=sys.stderr,
-        )
-        return {
-            "target": str(target_path),
-            "total_checks": 0,
-            "passed": 0,
-            "failed": 0,
-            "skipped": 0,
-            "checks": [],
-        }
-
-    if "\x00" in artifact_text:
-        print("Error: binary content detected, skipping all checks", file=sys.stderr)
-        return {
-            "target": str(target_path),
-            "total_checks": 0,
-            "passed": 0,
-            "failed": 0,
-            "skipped": 0,
-            "checks": [],
-        }
 
     # ── Security ──────────────────────────────────────────────────────────
     checks.append(ps001_hardcoded_paths(target_path, artifact_text))
@@ -634,7 +630,11 @@ def run_prescreen(target_path: Path) -> dict:
     checks.append(ps009_whitespace(target_path, artifact_text))
     checks.append(ps010_empty_file(target_path, artifact_text))
 
-    # ── Tally ─────────────────────────────────────────────────────────────
+    return checks
+
+
+def _tally_results(target_path: Path, checks: list[dict]) -> dict:
+    """Compute summary counts and return the final result dict."""
     passed = sum(1 for c in checks if c["status"] == "PASS")
     failed = sum(1 for c in checks if c["status"] == "FAIL")
     skipped = sum(1 for c in checks if c["status"] == "SKIP")
@@ -649,13 +649,59 @@ def run_prescreen(target_path: Path) -> dict:
     }
 
 
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def run_prescreen(target_path: Path) -> dict:
+    """Run all pre-screen checks against the target file and return result dict.
+
+    Safe to call as a library function — returns an error dict on invalid input
+    instead of calling sys.exit(). The 'error' key is present only when the
+    pipeline could not run.
+    """
+    # ── Input validation ──────────────────────────────────────────────────
+    error = _validate_input(target_path)
+    if error is not None:
+        return _empty_result(target_path, error)
+
+    artifact_text = target_path.read_text(encoding="utf-8", errors="replace")
+    ext = target_path.suffix.lower()
+
+    if len(artifact_text) > MAX_ARTIFACT_SIZE:
+        return _empty_result(
+            target_path,
+            f"Artifact text too large ({len(artifact_text)} bytes, max {MAX_ARTIFACT_SIZE})",
+        )
+
+    if "\x00" in artifact_text:
+        return _empty_result(target_path, "Binary content detected")
+
+    # ── Run checks ────────────────────────────────────────────────────────
+    checks = _collect_checks(target_path, artifact_text, ext)
+
+    return _tally_results(target_path, checks)
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         print("Usage: quorum-prescreen.py <target-file>", file=sys.stderr)
         sys.exit(2)
 
     target = Path(sys.argv[1]).resolve()
+
+    if not target.exists():
+        print(f"Error: file not found: {target.name}", file=sys.stderr)
+        sys.exit(1)
+
+    if not target.is_file():
+        print(f"Error: not a regular file: {target.name}", file=sys.stderr)
+        sys.exit(1)
+
     result = run_prescreen(target)
+
+    if "error" in result:
+        print(f"Error: {result['error']}", file=sys.stderr)
+        sys.exit(1)
+
     json.dump(result, sys.stdout, indent=2)
     print()  # trailing newline
 

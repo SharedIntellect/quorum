@@ -35,6 +35,11 @@ LOCATION_TOLERANCE = 5
 FUZZY_THRESHOLD = 0.6
 SCHEMA_VERSION = "1.0"
 
+VALID_VERDICTS = ("PASS", "PASS_WITH_NOTES", "REVISE", "REJECT")
+VALID_CATEGORIES = ("security", "correctness", "completeness", "code_hygiene", "cross_consistency")
+CRITIC_NAMES = ["correctness", "completeness", "security", "code_hygiene", "cross_consistency"]
+REQUIRED_METADATA_FIELDS = ("source", "domain", "complexity", "rubric", "depth", "author", "created")
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -83,6 +88,19 @@ class QuorumFinding:
     location: str | None
     critic: str
     rubric_criterion: str | None = None
+
+    @classmethod
+    def from_dict(cls, fd: dict, default_critic: str = "unknown") -> QuorumFinding:
+        """Construct from a finding dict (critic JSON or verdict.json report)."""
+        return cls(
+            id=fd.get("id", ""),
+            severity=fd.get("severity", "INFO"),
+            category=fd.get("category"),
+            description=fd.get("description", ""),
+            location=fd.get("location"),
+            critic=fd.get("critic", default_critic),
+            rubric_criterion=fd.get("rubric_criterion"),
+        )
 
 
 @dataclass
@@ -161,7 +179,8 @@ def parse_quorum_run(run_dir: Path, artifact_name: str) -> tuple[str | None, lis
       1. Batch: run_dir/per-file/<timestamp>-<name>/{verdict.json, critics/*.json}
       2. Single: run_dir/{verdict.json, critics/*.json}
 
-    Returns (verdict_status, findings_list).
+    Returns (verdict_status, findings_list). Returns (None, []) if no Quorum
+    output is found for this artifact.
     """
     # Try batch layout first: look for a subdirectory matching the artifact name
     per_file = run_dir / "per-file"
@@ -170,7 +189,9 @@ def parse_quorum_run(run_dir: Path, artifact_name: str) -> tuple[str | None, lis
     if per_file.is_dir():
         stem = Path(artifact_name).stem
         for entry in per_file.iterdir():
-            if entry.is_dir() and stem in entry.name:
+            # Exact stem match: entry name must end with the artifact stem
+            # (handles timestamp-prefixed dirs like "20260312-myfile")
+            if entry.is_dir() and entry.name.endswith(stem):
                 target_dir = entry
                 break
 
@@ -181,8 +202,9 @@ def parse_quorum_run(run_dir: Path, artifact_name: str) -> tuple[str | None, lis
         else:
             return None, []
 
-    # Read verdict
+    # Read verdict (once — reuse for findings extraction below)
     verdict_status = None
+    verdict_data: dict | None = None
     verdict_path = target_dir / "verdict.json"
     if verdict_path.exists():
         with open(verdict_path) as f:
@@ -198,35 +220,17 @@ def parse_quorum_run(run_dir: Path, artifact_name: str) -> tuple[str | None, lis
             with open(critic_file) as f:
                 critic_data = json.load(f)
             for fd in critic_data.get("findings", []):
-                findings.append(QuorumFinding(
-                    id=fd.get("id", ""),
-                    severity=fd.get("severity", "INFO"),
-                    category=fd.get("category"),
-                    description=fd.get("description", ""),
-                    location=fd.get("location"),
-                    critic=fd.get("critic", critic_name),
-                    rubric_criterion=fd.get("rubric_criterion"),
-                ))
+                findings.append(QuorumFinding.from_dict(fd, default_critic=critic_name))
 
-    # Also read findings from verdict.json if they exist there
-    if verdict_path.exists():
-        with open(verdict_path) as f:
-            verdict_data = json.load(f)
+    # Also read findings from verdict.json report (reuse already-parsed data)
+    if verdict_data is not None:
+        existing_ids = {f.id for f in findings if f.id}
         report = verdict_data.get("report", {})
         for fd in report.get("findings", []):
-            # Avoid duplicates by checking ID
-            existing_ids = {f.id for f in findings}
             fid = fd.get("id", "")
             if fid and fid not in existing_ids:
-                findings.append(QuorumFinding(
-                    id=fid,
-                    severity=fd.get("severity", "INFO"),
-                    category=fd.get("category"),
-                    description=fd.get("description", ""),
-                    location=fd.get("location"),
-                    critic=fd.get("critic", "unknown"),
-                    rubric_criterion=fd.get("rubric_criterion"),
-                ))
+                findings.append(QuorumFinding.from_dict(fd))
+                existing_ids.add(fid)
 
     return verdict_status, findings
 
@@ -419,9 +423,9 @@ def _compute_aggregate(scores: list[ArtifactScore]) -> dict[str, Any]:
     severity_distance_mean = _safe_div(sum(all_sev_distances), len(all_sev_distances)) if all_sev_distances else 0.0
 
     clean = [s for s in scores if s.expected_verdict == "PASS"]
-    clean_fp = sum(s.fp + s.trapped_fp for s in clean)
-    clean_total_q = sum(s.tp + s.fp + s.trapped_fp for s in clean)
-    fp_rate_clean = _safe_div(clean_fp, clean_total_q) if clean_total_q > 0 else 0.0
+    clean_fp = sum(s.fp for s in clean)  # real FP only — trapped FP are expected
+    clean_total_q = sum(s.tp + s.fp for s in clean)
+    fp_rate_clean = _safe_div(clean_fp, clean_total_q)
 
     verdict_correct = sum(1 for s in scores if s.verdict_correct)
     verdict_accuracy = _safe_div(verdict_correct, len(scores))
@@ -447,11 +451,13 @@ def _compute_aggregate(scores: list[ArtifactScore]) -> dict[str, Any]:
 
 
 def compute_metrics(scores: list[ArtifactScore]) -> dict[str, Any]:
-    """Compute aggregate and sliced metrics from per-artifact scores."""
+    """Compute aggregate metrics and slice by complexity, file type, source, and severity."""
     aggregate = _compute_aggregate(scores)
 
     # Sliced metrics
-    def _slice(key_fn: Any) -> dict[str, dict[str, Any]]:
+    from typing import Callable
+
+    def _group_and_aggregate(key_fn: Callable[[ArtifactScore], str]) -> dict[str, dict[str, Any]]:
         buckets: dict[str, list[ArtifactScore]] = {}
         for s in scores:
             k = key_fn(s)
@@ -462,20 +468,14 @@ def compute_metrics(scores: list[ArtifactScore]) -> dict[str, Any]:
             result[k] = m
         return result
 
-    by_critic: dict[str, dict[str, Any]] = {}
-    for critic_name in ["correctness", "completeness", "security", "code_hygiene", "cross_consistency"]:
-        # Filter findings per critic — create synthetic ArtifactScores
-        critic_scores = []
-        for s in scores:
-            # This is a simplification — full per-critic slicing would require
-            # re-running matching per critic. For now, use metadata category.
-            pass
-        by_critic[critic_name] = {}  # populated below
+    # NOTE: Per-critic slicing requires re-running matching per critic with
+    # synthetic ArtifactScores. Deferred to a future version — omitted rather
+    # than returning empty dicts that misrepresent coverage.
 
     sliced = {
-        "by_complexity": _slice(lambda s: s.metadata.get("complexity", "unknown")),
-        "by_file_type": _slice(lambda s: s.metadata.get("domain", "unknown")),
-        "by_source": _slice(lambda s: s.metadata.get("source", "unknown")),
+        "by_complexity": _group_and_aggregate(lambda s: s.metadata.get("complexity", "unknown")),
+        "by_file_type": _group_and_aggregate(lambda s: s.metadata.get("domain", "unknown")),
+        "by_source": _group_and_aggregate(lambda s: s.metadata.get("source", "unknown")),
     }
 
     # Per-severity slice (need to reconstruct from finding details)
@@ -515,8 +515,8 @@ def validate_annotations(annotations_dir: Path, golden_dir: Path) -> list[str]:
         count += 1
         try:
             ann = parse_annotation(ann_path)
-        except Exception as e:
-            errors.append(f"{ann_path.name}: parse error: {e}")
+        except (yaml.YAMLError, KeyError, TypeError, ValueError) as e:
+            errors.append(f"{ann_path.name}: parse error ({type(e).__name__}): {e}")
             continue
 
         # Check schema version
@@ -528,7 +528,7 @@ def validate_annotations(annotations_dir: Path, golden_dir: Path) -> list[str]:
             errors.append(f"{ann_path.name}: missing artifact path")
         if not ann.expected_verdict:
             errors.append(f"{ann_path.name}: missing expected_verdict")
-        if ann.expected_verdict not in ("PASS", "PASS_WITH_NOTES", "REVISE", "REJECT"):
+        if ann.expected_verdict not in VALID_VERDICTS:
             errors.append(f"{ann_path.name}: invalid expected_verdict '{ann.expected_verdict}'")
 
         # Check artifact exists and SHA-256 matches
@@ -556,11 +556,11 @@ def validate_annotations(annotations_dir: Path, golden_dir: Path) -> list[str]:
             seen_ids.add(fd.id)
             if fd.severity not in SEVERITY_TIERS:
                 errors.append(f"{ann_path.name}: {fd.id} invalid severity '{fd.severity}'")
-            if fd.category not in ("security", "correctness", "completeness", "code_hygiene", "cross_consistency"):
+            if fd.category not in VALID_CATEGORIES:
                 errors.append(f"{ann_path.name}: {fd.id} invalid category '{fd.category}'")
 
         # Check metadata
-        for req in ("source", "domain", "complexity", "rubric", "depth", "author", "created"):
+        for req in REQUIRED_METADATA_FIELDS:
             if req not in ann.metadata:
                 errors.append(f"{ann_path.name}: missing metadata.{req}")
 
@@ -648,12 +648,12 @@ def format_markdown(metrics: dict, scores: list[ArtifactScore], thresholds: dict
         ("Recall", thresholds.get("min_recall", 0.80), agg["recall"]),
         ("Precision", thresholds.get("min_precision", 0.70), agg["precision"]),
     ]
-    all_met = True
+    all_thresholds_met = True
     for name, target, actual in checks:
-        met = actual >= target
-        if not met:
-            all_met = False
-        status = "PASS" if met else "FAIL"
+        threshold_met = actual >= target
+        if not threshold_met:
+            all_thresholds_met = False
+        status = "PASS" if threshold_met else "FAIL"
         lines.append(f"| {name} | {target:.0%} | {actual:.2%} | {status} |")
     lines.append("")
 
@@ -709,10 +709,23 @@ def score(
     warnings: list[str] = []
 
     for ann_path in sorted(annotations_dir.glob("*.annotations.yaml")):
-        ann = parse_annotation(ann_path)
+        try:
+            ann = parse_annotation(ann_path)
+        except (yaml.YAMLError, KeyError, TypeError, ValueError) as e:
+            warnings.append(
+                f"WARNING: skipping {ann_path.name}: parse error ({type(e).__name__}): {e}"
+            )
+            continue
+
+        # Path traversal guard — artifact must resolve within golden_dir
+        artifact_path = (golden_dir / ann.artifact).resolve()
+        if not str(artifact_path).startswith(str(golden_dir.resolve())):
+            warnings.append(
+                f"WARNING: skipping {ann.artifact}: path traversal outside golden dir"
+            )
+            continue
 
         # SHA-256 integrity check
-        artifact_path = golden_dir / ann.artifact
         if artifact_path.exists():
             actual_sha = compute_sha256(artifact_path)
             if actual_sha != ann.artifact_sha256:
@@ -723,6 +736,13 @@ def score(
 
         # Parse Quorum output
         actual_verdict, quorum_findings = parse_quorum_run(run_dir, ann.artifact)
+
+        # Warn if Quorum output is entirely missing (distinct from "no findings")
+        if actual_verdict is None:
+            warnings.append(
+                f"WARNING: no Quorum output found for {ann.artifact} — "
+                f"scoring as zero findings (all GT findings will be FN)"
+            )
 
         # Match findings
         match_results, tp, fp, fn, trapped_fp, sev_matches, sev_dists = match_findings(
@@ -755,16 +775,16 @@ def score(
 
     # Check thresholds
     agg = metrics["aggregate"]
-    met = True
+    thresholds_met = True
     for key, target in thresholds.items():
         metric_name = key.replace("min_", "")
         if metric_name in agg and agg[metric_name] < target:
-            met = False
+            thresholds_met = False
             print(f"THRESHOLD NOT MET: {metric_name} = {agg[metric_name]:.4f} < {target}", file=sys.stderr)
 
-    metrics["thresholds"] = {**thresholds, "met": met}
+    metrics["thresholds"] = {**thresholds, "met": thresholds_met}
 
-    return metrics, scores, met
+    return metrics, scores, thresholds_met
 
 
 # ---------------------------------------------------------------------------
@@ -816,9 +836,9 @@ def main() -> int:
     }
 
     try:
-        metrics, scores, met = score(args.run_dir, args.annotations_dir, golden_dir, thresholds)
-    except Exception as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        metrics, scores, thresholds_met = score(args.run_dir, args.annotations_dir, golden_dir, thresholds)
+    except (yaml.YAMLError, json.JSONDecodeError, KeyError, FileNotFoundError, PermissionError) as e:
+        print(f"ERROR ({type(e).__name__}): {e}", file=sys.stderr)
         return 2
 
     # Output
@@ -842,7 +862,7 @@ def main() -> int:
         else:
             print(md_str)
 
-    return 0 if met else 1
+    return 0 if thresholds_met else 1
 
 
 if __name__ == "__main__":
