@@ -1,6 +1,6 @@
 ---
 name: quorum
-description: Multi-agent validation framework — 4 independent AI critics evaluate artifacts against rubrics with evidence-grounded findings.
+description: Multi-agent validation framework — 6 independent AI critics evaluate artifacts against rubrics with evidence-grounded findings.
 metadata: {"openclaw":{"requires":{"bins":["python3","pip"],"env":["ANTHROPIC_API_KEY","OPENAI_API_KEY"]},"install":[{"id":"clone-repo","kind":"shell","command":"git clone https://github.com/SharedIntellect/quorum.git /tmp/quorum-install && cd /tmp/quorum-install/reference-implementation && pip install -r requirements.txt","label":"Clone Quorum repo and install Python dependencies"}],"source":"https://github.com/SharedIntellect/quorum"}}
 ---
 
@@ -100,9 +100,9 @@ Each finding includes: severity (CRITICAL/HIGH/MEDIUM/LOW), evidence citations p
 ## More Information
 
 - [SPEC.md](https://github.com/SharedIntellect/quorum/blob/main/SPEC.md) — Full architectural specification
-- [MODEL_REQUIREMENTS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/MODEL_REQUIREMENTS.md) — Supported models and tiers
-- [CONFIG_REFERENCE.md](https://github.com/SharedIntellect/quorum/blob/main/docs/CONFIG_REFERENCE.md) — All configuration options
-- [FOR_BEGINNERS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/FOR_BEGINNERS.md) — New to agent validation? Start here
+- [MODEL_REQUIREMENTS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/getting-started/MODEL_REQUIREMENTS.md) — Supported models and tiers
+- [CONFIG_REFERENCE.md](https://github.com/SharedIntellect/quorum/blob/main/docs/configuration/CONFIG_REFERENCE.md) — All configuration options
+- [FOR_BEGINNERS.md](https://github.com/SharedIntellect/quorum/blob/main/docs/getting-started/FOR_BEGINNERS.md) — New to agent validation? Start here
 
 
 ---

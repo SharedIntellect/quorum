@@ -55,7 +55,7 @@ models:
 depth: standard    # quick | standard | thorough
 ```
 
-See [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) for full options and [MODEL_REQUIREMENTS.md](MODEL_REQUIREMENTS.md) for supported models.
+See [CONFIG_REFERENCE.md](../configuration/CONFIG_REFERENCE.md) for full options and [MODEL_REQUIREMENTS.md](MODEL_REQUIREMENTS.md) for supported models.
 
 ## Requirements
 
@@ -66,7 +66,7 @@ See [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) for full options and [MODEL_REQUI
 
 ## Troubleshooting
 
-**"No model configured"** — Run `quorum run` once and follow the first-run setup prompts, or manually create `quorum-config.yaml` (see [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md)).
+**"No model configured"** — Run `quorum run` once and follow the first-run setup prompts, or manually create `quorum-config.yaml` (see [CONFIG_REFERENCE.md](../configuration/CONFIG_REFERENCE.md)).
 
 **"API key not found"** — Set your provider's API key as an environment variable:
 ```bash

@@ -3,7 +3,7 @@
 **Version:** 3.0  
 **Last Updated:** March 2026  
 **Status:** Documented and partially implemented — see §3 for implementation status per component  
-**Platform:** Designed for [OpenClaw](https://openclaw.ai) agent systems. Cross-platform compatibility with other agent frameworks is under active exploration — see [MODEL_REQUIREMENTS.md](docs/MODEL_REQUIREMENTS.md) for supported models and platforms.
+**Platform:** Designed for [OpenClaw](https://openclaw.ai) agent systems. Cross-platform compatibility with other agent frameworks is under active exploration — see [MODEL_REQUIREMENTS.md](docs/getting-started/MODEL_REQUIREMENTS.md) for supported models and platforms.
 
 ---
 
@@ -153,7 +153,7 @@ Pre-screen results are written to `prescreen.json` in the run directory. If any 
 Supervisor (Orchestrator)
 ├─ Correctness Critic (Tier 2)      [IMPLEMENTED]
 ├─ Completeness Critic (Tier 2)     [IMPLEMENTED]
-├─ Security Critic (Tier 1)         [IMPLEMENTED] — grounded: OWASP ASVS 5.0, CWE Top 25, NIST SA-11; see docs/SEC02_BUSINESS_LOGIC_VALIDATION.md for business logic workflow
+├─ Security Critic (Tier 1)         [IMPLEMENTED] — grounded: OWASP ASVS 5.0, CWE Top 25, NIST SA-11; see docs/critics/SEC02_BUSINESS_LOGIC_VALIDATION.md for business logic workflow
 ├─ Code Hygiene Critic (Tier 2)     [IMPLEMENTED] — grounded: ISO 25010:2023, CISQ
 ├─ Cross-Artifact Consistency       [IMPLEMENTED] — Phase 2, separate from BaseCritic
 ├─ Architecture Critic (Tier 2)     [SPECIFIED, not yet built]
@@ -462,9 +462,9 @@ Quorum is built on these peer-reviewed papers:
 
 ## 11. Getting Started
 
-1. Read [IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for a reference walkthrough
+1. Read [IMPLEMENTATION.md](docs/architecture/IMPLEMENTATION.md) for a reference walkthrough
 2. Review [examples/](examples/) for your use case
-3. Adapt built-in rubrics or build custom ones (see [RUBRIC_BUILDING_GUIDE.md](docs/RUBRIC_BUILDING_GUIDE.md))
+3. Adapt built-in rubrics or build custom ones (see [RUBRIC_BUILDING_GUIDE.md](docs/guides/RUBRIC_BUILDING_GUIDE.md))
 4. Run the tutorial: `quorum run --target examples/sample-research.md --depth quick`
 
 ---

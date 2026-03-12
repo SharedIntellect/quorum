@@ -23,7 +23,7 @@ Before you start, you need:
 1. **The source document in parseable format.** PDFs with embedded text work fine; scanned PDFs need OCR. See Step 1.
 2. **Domain knowledge.** This is non-negotiable. Standards are dense, and normative decomposition without domain knowledge produces rubrics that are technically correct and practically useless. The criteria generation step (Step 3) is where expertise matters most.
 3. **A clear scope boundary.** Full standards are large. Decide upfront which sections or requirement types you're encoding. Scope creep kills rubric projects.
-4. **The Quorum rubric schema.** See [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) for the full spec. A rubric is a JSON file; critics consume it at evaluation time.
+4. **The Quorum rubric schema.** See [CONFIG_REFERENCE.md](../configuration/CONFIG_REFERENCE.md) for the full spec. A rubric is a JSON file; critics consume it at evaluation time.
 
 ---
 
@@ -353,4 +353,4 @@ These assume focused work, good source quality, and pre-existing domain expertis
 
 ---
 
-*Questions or rubric contributions → [CONTRIBUTING.md](../CONTRIBUTING.md)*
+*Questions or rubric contributions → [CONTRIBUTING.md](../../CONTRIBUTING.md)*

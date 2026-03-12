@@ -24,10 +24,10 @@ Run `python tools/validate-docs.py` to find stale references, then fix:
 - [ ] `README.md` — "What's coming" section (remove shipped items)
 - [ ] `SPEC.md` — status matrix / implementation checklist updated
 - [ ] `SPEC.md` — shipped critic counts in prose
-- [ ] `docs/FOR_BEGINNERS.md` — critic counts and cost estimates
-- [ ] `docs/CONFIG_REFERENCE.md` — critic status markers
-- [ ] `docs/TUTORIAL.md` — critic descriptions and status markers
-- [ ] `docs/IMPLEMENTATION.md` — critic status markers and depth profiles
+- [ ] `docs/getting-started/FOR_BEGINNERS.md` — critic counts and cost estimates
+- [ ] `docs/configuration/CONFIG_REFERENCE.md` — critic status markers
+- [ ] `docs/getting-started/TUTORIAL.md` — critic descriptions and status markers
+- [ ] `docs/architecture/IMPLEMENTATION.md` — critic status markers and depth profiles
 - [ ] `SKILL.md` — critic counts in depth descriptions
 
 **⚠️ Note on Cross-Consistency:** Cross-Consistency is a shipped critic but requires the `--relationships` flag. When updating counts, use language like: "6 shipped critics (including Cross-Consistency, activated with `--relationships`)".

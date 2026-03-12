@@ -4,6 +4,29 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.2] — 2026-03-12
+
+### Documentation — Docs Restructure & README Rewrite (PR #16)
+
+- **README.md** rewritten: ~400 lines → ~120 lines. Focused on what Quorum is, how to run it, and where to go next. First-person voice preserved.
+- **23 docs reorganized** into 6 categorized subdirectories under `docs/`:
+  - `getting-started/` — QUICK_START, INSTALLATION, TUTORIAL, FOR_BEGINNERS, MODEL_REQUIREMENTS
+  - `architecture/` — IMPLEMENTATION, THE_NINE
+  - `critics/` — all critic-specific docs and frameworks
+  - `guides/` — RUBRIC_BUILDING_GUIDE, CROSS_ARTIFACT_DESIGN
+  - `reviews/` — external review snapshots
+  - `configuration/` — CONFIG_REFERENCE
+- **New files:** `docs/getting-started/QUICK_START.md` (zero to running in <5 min), `docs/README.md` (navigation hub)
+- All cross-references updated across 30+ files
+- `validate-docs.py` exclusion updated to match new `docs/reviews/` path
+
+### Fixed
+- 7 broken relative links caused by docs moving one directory deeper (CONFIG_REFERENCE, SPEC, CONTRIBUTING, reference-implementation paths)
+- `SKILL.md` frontmatter: "4 independent AI critics" → "6" (matched shipped state)
+- `README.md` version badge: v0.7.0 → v0.7.2
+
+---
+
 ## [0.7.1] — 2026-03-12
 
 ### Fixed — Self-Validation Findings (PR #14)
