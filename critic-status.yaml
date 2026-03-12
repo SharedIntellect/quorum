@@ -2,43 +2,69 @@
 # Used by tools/validate-docs.py to detect stale documentation.
 # Update this file FIRST when shipping a critic or feature.
 
-version: "0.6.0"
+version: "0.6.1"
+spec_version: "3.0"
 
 critics:
   correctness:
     status: shipped
+    callable: true
     since: "0.3.0"
     description: "Factual accuracy, citation validity, logical consistency"
   completeness:
     status: shipped
+    callable: true
     since: "0.3.0"
     description: "Coverage gaps, missing sections, rubric criterion coverage"
   security:
     status: shipped
+    callable: true
     since: "0.4.0"
     description: "OWASP ASVS 5.0, CWE Top 25, NIST SA-11, business logic"
   code_hygiene:
     status: shipped
+    callable: true
     since: "0.4.0"
     description: "ISO 25010:2023, CISQ quality measures, maintainability"
   cross_consistency:
     status: shipped
+    callable: true
     since: "0.5.0"
     description: "Inter-file consistency via relationships manifest (requires --relationships flag)"
     note: "Activated with --relationships flag; not part of default depth panel"
   tester:
     status: shipped
+    callable: false
     since: "0.6.0"
     description: "Finding verification — L1 deterministic + L2 LLM claim checking"
+    note: "Code and tests shipped; not yet wired into pipeline (not in CRITIC_REGISTRY or depth configs)"
   architecture:
     status: planned
+    callable: false
     description: "Structural design, modularity, dependency analysis"
   delegation:
     status: planned
+    callable: false
     description: "Multi-agent coordination, responsibility boundaries"
   style:
     status: planned
+    callable: false
     description: "Writing quality, tone consistency, formatting standards"
+
+# What critics actually run at each depth level via `quorum run`
+depth_configs:
+  quick:
+    - correctness
+    - completeness
+  standard:
+    - correctness
+    - completeness
+    - security
+  thorough:
+    - correctness
+    - completeness
+    - security
+    - code_hygiene
 
 features:
   prescreen:

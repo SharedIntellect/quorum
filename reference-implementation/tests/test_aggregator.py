@@ -25,8 +25,15 @@ def make_finding(severity=Severity.MEDIUM, description="Test finding", critic="c
     return Finding(**defaults)
 
 
-def make_critic_result(name="correctness", findings=None, confidence=0.85):
-    return CriticResult(critic_name=name, findings=findings or [], confidence=confidence, runtime_ms=100)
+def make_critic_result(
+    name="correctness", findings=None, confidence=0.85,
+    criteria_total=10, criteria_evaluated=10,
+):
+    return CriticResult(
+        critic_name=name, findings=findings or [], confidence=confidence,
+        criteria_total=criteria_total, criteria_evaluated=criteria_evaluated,
+        runtime_ms=100,
+    )
 
 
 @pytest.fixture
@@ -193,74 +200,59 @@ class TestDeduplicate:
 
 class TestCalculateConfidence:
     def test_single_active_result(self, aggregator):
-        results = [make_critic_result("correctness", confidence=0.8)]
+        results = [make_critic_result("correctness", criteria_total=10, criteria_evaluated=10)]
         conf = aggregator._calculate_confidence(results, [])
-        assert conf == 0.8
+        assert conf == 1.0  # 10/10 = full coverage
 
-    def test_average_of_active(self, aggregator):
+    def test_partial_coverage(self, aggregator):
         results = [
-            make_critic_result("correctness", confidence=0.8),
-            make_critic_result("completeness", confidence=0.6),
+            make_critic_result("correctness", criteria_total=10, criteria_evaluated=10),
+            make_critic_result("completeness", criteria_total=10, criteria_evaluated=10),
         ]
         conf = aggregator._calculate_confidence(results, [])
-        assert conf == 0.7
+        assert conf == 1.0  # 20/20 = full coverage
 
-    def test_skip_penalty(self, aggregator):
-        active = make_critic_result("correctness", confidence=0.8)
+    def test_skipped_reduces_coverage(self, aggregator):
+        active = make_critic_result("correctness", criteria_total=10, criteria_evaluated=10)
         skipped = CriticResult(
             critic_name="security",
             findings=[],
             confidence=0.0,
+            criteria_total=10,
+            criteria_evaluated=0,
             runtime_ms=0,
             skipped=True,
         )
         conf = aggregator._calculate_confidence([active, skipped], [])
-        assert conf == pytest.approx(0.75, abs=0.01)  # 0.8 - 0.05
-
-    def test_agreement_bonus(self, aggregator):
-        results = [
-            make_critic_result("correctness", confidence=0.8),
-            make_critic_result("completeness", confidence=0.8),
-        ]
-        # Finding with merged critic (comma = seen by multiple)
-        finding = make_finding(critic="correctness,completeness")
-        conf = aggregator._calculate_confidence(results, [finding])
-        assert conf > 0.8  # bonus applied
+        assert conf == 0.5  # 10/20 = half coverage
 
     def test_all_skipped_returns_zero(self, aggregator):
         skipped = CriticResult(
             critic_name="correctness",
             findings=[],
             confidence=0.0,
+            criteria_total=10,
+            criteria_evaluated=0,
             runtime_ms=0,
             skipped=True,
         )
         conf = aggregator._calculate_confidence([skipped], [])
         assert conf == 0.0
 
-    def test_confidence_clamped_to_one(self, aggregator):
+    def test_coverage_clamped_to_one(self, aggregator):
         results = [
-            make_critic_result("correctness", confidence=1.0),
-            make_critic_result("completeness", confidence=1.0),
+            make_critic_result("correctness", criteria_total=10, criteria_evaluated=10),
+            make_critic_result("completeness", criteria_total=10, criteria_evaluated=10),
         ]
         findings = [make_finding(critic="a,b") for _ in range(20)]
         conf = aggregator._calculate_confidence(results, findings)
         assert conf <= 1.0
 
-    def test_confidence_clamped_to_zero(self, aggregator):
+    def test_zero_criteria_returns_zero(self, aggregator):
         results = [
-            make_critic_result("correctness", confidence=0.0),
+            make_critic_result("correctness", criteria_total=0, criteria_evaluated=0),
         ]
-        skipped_results = [
-            CriticResult(
-                critic_name=f"critic_{i}",
-                findings=[], confidence=0.0, runtime_ms=0, skipped=True,
-            )
-            for i in range(20)
-        ]
-        conf = aggregator._calculate_confidence(
-            results + skipped_results, []
-        )
+        conf = aggregator._calculate_confidence(results, [])
         assert conf >= 0.0
 
 

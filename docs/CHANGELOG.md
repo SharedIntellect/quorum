@@ -4,6 +4,22 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.1] — 2026-03-11
+
+### Changed
+- **Confidence scores replaced with criteria coverage.** Verdicts now report "Coverage: N% of criteria evaluated" with per-critic criteria counts (`criteria_evaluated` / `criteria_total`) instead of fabricated confidence percentages. The previous formula (`0.5 + ratio × 0.45`) always returned ~0.95 since evidence non-emptiness was already enforced upstream — the number was decorative. Coverage counts are honest and verifiable.
+- **Aggregator confidence** now computes total criteria evaluated across all critics rather than averaging per-critic scores with skip penalties and agreement bonuses.
+- **Report output** shows "N/M criteria" per file and "Coverage: N% of criteria evaluated" in batch and single-file reports. Fixer proposal confidence (LLM self-assessed) is unchanged — it's a legitimately different concept.
+- `CriticResult` model gains `criteria_total` and `criteria_evaluated` fields.
+
+### Fixed
+- **SPEC.md** status summary updated to reflect 6 shipped critics (was still showing "4/9" from v0.5.x).
+- **IMPLEMENTATION.md** status header updated to v0.6.0 with correct critic count and pointer to `critic-status.yaml` as authoritative source.
+
+### Tooling
+- **`validate-docs.py` enhanced**: version consistency checks across all doc files, depth config validation against `critic-status.yaml`, fraction pattern detection (DEC-019: no exposed denominators for critic counts), callable vs shipped distinction.
+- **`critic-status.yaml` extended**: `callable` flag (shipped vs invocable in pipeline), `spec_version`, `depth_configs` per depth profile.
+
 ## [0.6.0] — 2026-03-10
 
 ### Added

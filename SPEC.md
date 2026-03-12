@@ -470,7 +470,7 @@ Quorum is built on these peer-reviewed papers:
 ---
 
 **Quorum is a production-oriented, early-stage validation framework.**  
-*Architecture is sound and tested, but the product is still growing: 4/9 critics shipped, trust/monitoring systems specified but not wired; learning memory and fix re-validation shipped in v0.5.3.*
+*Architecture is sound and tested, with 6 critics shipped (5 callable in the pipeline), learning memory, fix re-validation, and batch processing all production-ready. Trust and monitoring systems are specified but not yet wired.*
 
 
 ---

@@ -287,17 +287,22 @@ class CrossConsistencyCritic:
                 ))
 
         runtime_ms = int(time.time() * 1000) - start_ms
-        confidence = self._estimate_confidence(all_findings, len(resolved_relationships))
+        criteria_total = len(resolved_relationships)
+        criteria_evaluated = len(resolved_relationships)  # All relationships are evaluated
+        confidence = self._compute_coverage(criteria_evaluated, criteria_total)
 
         logger.info(
-            "[%s] Done: %d findings across %d relationships in %dms (confidence=%.2f)",
-            self.name, len(all_findings), len(resolved_relationships), runtime_ms, confidence,
+            "[%s] Done: %d findings across %d relationships in %dms (coverage=%.0f%%)",
+            self.name, len(all_findings), len(resolved_relationships),
+            runtime_ms, confidence * 100,
         )
 
         return CriticResult(
             critic_name=self.name,
             findings=all_findings,
             confidence=confidence,
+            criteria_total=criteria_total,
+            criteria_evaluated=criteria_evaluated,
             runtime_ms=runtime_ms,
         )
 
@@ -505,12 +510,9 @@ class CrossConsistencyCritic:
                 lines.append(f"  Location: {f.location}")
         return "\n".join(lines)
 
-    def _estimate_confidence(self, findings: list[Finding], rel_count: int) -> float:
-        """Estimate confidence based on findings quality and relationship count."""
-        if rel_count == 0:
+    @staticmethod
+    def _compute_coverage(criteria_evaluated: int, criteria_total: int) -> float:
+        """Compute coverage ratio for cross-consistency (relationships evaluated / total)."""
+        if criteria_total == 0:
             return 0.0
-        if not findings:
-            return 0.80  # Clean pass, moderate-high confidence
-        grounded = sum(1 for f in findings if f.evidence.result)
-        ratio = grounded / len(findings) if findings else 1.0
-        return round(0.5 + (ratio * 0.40), 2)
+        return round(criteria_evaluated / criteria_total, 2)

@@ -111,7 +111,9 @@ class CriticResult(BaseModel):
     """Output produced by a single critic after evaluating an artifact."""
     critic_name: str
     findings: list[Finding] = Field(default_factory=list)
-    confidence: float = Field(ge=0.0, le=1.0, description="Critic's confidence in its assessment (0-1)")
+    confidence: float = Field(ge=0.0, le=1.0, description="Criteria coverage ratio (evaluated/total)")
+    criteria_total: int = Field(default=0, description="Total rubric criteria in scope for this critic")
+    criteria_evaluated: int = Field(default=0, description="Criteria that produced findings or were explicitly assessed")
     runtime_ms: int = Field(default=0, description="Wall-clock time the critic took")
     skipped: bool = Field(default=False, description="True if critic was skipped (e.g. not applicable)")
     skip_reason: Optional[str] = None

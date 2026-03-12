@@ -1472,8 +1472,8 @@ def _init_batch_report(path: Path, target: str | Path) -> None:
         "",
         "## Per-File Summary",
         "",
-        "| File | Status | Findings | Confidence |",
-        "|------|--------|----------|------------|",
+        "| File | Status | Findings | Coverage |",
+        "|------|--------|----------|----------|",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -1482,9 +1482,17 @@ def _append_file_to_batch_report(path: Path, result: "FileResult") -> None:
     """Append a single file's result row to the live batch report."""
     name = Path(result.file_path).name
     finding_count = len(result.verdict.report.findings) if result.verdict.report else 0
+    # Show criteria coverage instead of fabricated confidence
+    report = result.verdict.report
+    if report and report.critic_results:
+        total = sum(r.criteria_total for r in report.critic_results)
+        evaluated = sum(r.criteria_evaluated for r in report.critic_results if not r.skipped)
+        coverage_str = f"{evaluated}/{total} criteria"
+    else:
+        coverage_str = "—"
     row = (
         f"| `{name}` | {result.verdict.status.value} "
-        f"| {finding_count} | {result.verdict.confidence:.0%} |"
+        f"| {finding_count} | {coverage_str} |"
     )
     try:
         with open(path, "a", encoding="utf-8") as f:
@@ -1507,7 +1515,7 @@ def _finalize_batch_report(
         "",
         f"> {batch.reasoning}",
         "",
-        f"**Confidence:** {batch.confidence:.0%}  ",
+        f"**Coverage:** {batch.confidence:.0%} of criteria evaluated  ",
         f"**Files:** {batch.total_files}  ",
         "",
     ]
@@ -1609,7 +1617,7 @@ def _write_report(
         f"",
         f"> {verdict.reasoning}",
         f"",
-        f"**Confidence:** {verdict.confidence:.0%}",
+        f"**Coverage:** {verdict.confidence:.0%} of criteria evaluated",
         f"",
     ]
 
