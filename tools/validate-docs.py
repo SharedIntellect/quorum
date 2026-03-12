@@ -11,6 +11,13 @@ Exit codes:
   0 = clean (no findings)
   1 = findings detected
   2 = error (missing manifest, bad YAML, etc.)
+
+Companion rubric:
+  This script handles deterministic mechanical checks (counts, versions, status markers).
+  For semantic and narrative evaluation (claim accuracy, navigation coherence, onboarding
+  progression, boundary discipline), use the Documentation Quality Rubric:
+    rubrics/builtin/documentation.json
+  Run this script FIRST — its output serves as evidence for DOC-002, DOC-003, and DOC-005.
 """
 
 import re
