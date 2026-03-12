@@ -124,7 +124,7 @@ def _scan_lines(
     Args:
         text:             Full artifact text
         pattern:          Compiled regex
-        exclude_comments: If True, skip lines starting with # (comment lines)
+        exclude_comments: If True, skip lines that start with # (Python/YAML)
     """
     hits: list[tuple[int, str]] = []
     for i, line in enumerate(text.splitlines(), start=1):
@@ -354,9 +354,7 @@ def ps005_yaml_validity(artifact_path: Path, artifact_text: str) -> dict:
     except yaml.YAMLError as exc:
         mark = getattr(exc, "problem_mark", None)
         loc = f"line {mark.line + 1}" if mark else "unknown location"
-        # Sanitize error message to avoid exposing parser internals or paths
-        error_msg = str(exc).split('\n')[0]  # First line only, no stack details
-        evidence = f"YAML parse error at {loc}: {error_msg}"
+        evidence = f"YAML parse error at {loc}: {exc}"
         return _make_fail(
             "PS-005", "yaml_validity", "syntax",
             f"Invalid YAML at {loc}",
@@ -387,12 +385,10 @@ def ps006_python_syntax(artifact_path: Path, artifact_text: str) -> dict:
         msg = str(exc)
         loc_match = re.search(r"line (\d+)", msg)
         loc = f"line {loc_match.group(1)}" if loc_match else "unknown"
-        # Sanitize error message to avoid exposing internal paths or compiler state
-        sanitized_msg = msg.split('\n')[0]  # First line only, no full traceback
         return _make_fail(
             "PS-006", "python_syntax", "syntax",
             f"Python syntax error at {loc}",
-            sanitized_msg, [loc] if loc_match else [],
+            msg, [loc] if loc_match else [],
         )
 
     except (OSError, UnicodeDecodeError) as exc:

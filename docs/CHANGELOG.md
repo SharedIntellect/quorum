@@ -4,6 +4,33 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.1] — 2026-03-12
+
+### Fixed — Self-Validation Findings (PR #14)
+
+Ran Quorum self-validation (standard depth) against all shipped artifacts in v0.6.1, Copilot CLI Port, Golden Test Set, and core engine. Fixed **64 findings** across **10 files** — 3 CRITICAL, 16 HIGH, 45 MEDIUM/LOW.
+
+#### Critical Fixes
+- **aggregator.py** — INFO-only findings now correctly produce PASS (not PASS_WITH_NOTES), honoring the documented verdict contract
+- **pipeline.py** — `resume_batch_validation` now restores original config + relationships_path from manifest (was hardcoding None, causing resumed batches to produce different results than original runs)
+- **models.py** — `Locus` now validates `start_line <= end_line` and `_hash_byte_range` raises ValueError on out-of-bounds ranges instead of silently hashing empty bytes
+
+#### High-Impact Fixes
+- **Severity normalization** (base.py, cross_consistency.py) — malformed LLM severity strings no longer discard ALL findings for that critic
+- **Format-string injection** (cross_consistency.py) — user YAML `scope` field now brace-escaped before `str.format()`
+- **Deterministic dedup** (aggregator.py) — findings sorted by severity before greedy matching; output no longer depends on input ordering
+- **CancelledError handling** (pipeline.py) — cancelled futures in batch loops no longer crash pipeline
+- **Library-safe prescreen** (quorum-prescreen.py) — `run_prescreen()` returns error dicts instead of calling `sys.exit()`
+
+#### Tests
+- 879 passed, 0 failures
+- 2 tests updated: `test_info_finding_pass_with_notes` and `test_verdict_json_serialization_never_none` (codified buggy behavior; now corrected)
+
+#### Process
+- Added mandatory self-validation step to Claude Code task template (`~/.claude/tasks/README.md`)
+
+---
+
 ## [0.7.0-port.1] — 2026-03-12
 
 ### Added
