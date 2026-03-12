@@ -1,0 +1,70 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-007-dead-code.py"
+artifact_sha256: "d37a7cc8c4d07673637ec686ccab86fcb8e4e824a1b1028d324b9845b765f3c1"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-012
+    description: >
+      Unreachable code after unconditional `return` in `classify_size()`. The two
+      lines after the final `return "tiny"` statement — `category = "unknown"` and
+      `return category` — are dead code. Every branch of the preceding if/elif/else
+      chain contains a `return`, so these lines can never execute. They are vestigial
+      from an earlier implementation and will never be reached at runtime. Static
+      analysis tools (pylint, pyflakes, mypy) will flag this.
+    location: "line 189-190"
+    severity: HIGH
+    category: code_hygiene
+    critic: code_hygiene
+    notes: >
+      Dead code should be removed rather than left as-is. Beyond being confusing to
+      readers, it creates a maintenance hazard: a future refactor might remove one
+      of the early returns, inadvertently "activating" the dead path with unintended
+      behavior. The entire `classify_size()` function body after the `else: return "tiny"`
+      clause (lines 189-190) should be deleted.
+
+  - id: GT-013
+    description: >
+      Unused import: `import xml.etree.ElementTree as ET` at the top of the file.
+      Nothing in the module uses `ET` or any XML-related functionality. The comment
+      acknowledges this is a leftover from a refactor. Unused imports add noise,
+      slow import time marginally, and mislead readers about module dependencies.
+    location: "line 13"
+    severity: MEDIUM
+    category: code_hygiene
+    critic: code_hygiene
+    notes: >
+      Remove the import. If XML support is needed in the future, it can be
+      re-added at that time.
+
+  - id: GT-014
+    description: >
+      Duplicated word-join capitalization logic in `snake_to_camel()` and
+      `_title_case_words()`. The `snake_to_camel()` function (line ~109) inline-
+      implements `components[0] + "".join(x.title() for x in components[1:])` rather
+      than calling the `_title_case_words()` helper that exists in the same file
+      (line ~117). The comment in `_title_case_words()` acknowledges this duplication
+      explicitly. Both functions are maintained independently, creating a risk of
+      divergence in behavior.
+    location: "line 109-111 and line 117-119"
+    severity: MEDIUM
+    category: code_hygiene
+    critic: code_hygiene
+    notes: >
+      `snake_to_camel()` should delegate the title-casing to `_title_case_words()`,
+      applying it only to the tail components (not the first word). This eliminates
+      the duplicate logic. Alternatively, consolidate into a single private helper
+      and call it from both `snake_to_camel()` and `snake_to_pascal()`.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: medium
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

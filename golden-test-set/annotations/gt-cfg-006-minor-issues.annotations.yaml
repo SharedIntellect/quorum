@@ -1,0 +1,39 @@
+schema_version: "1.0"
+
+artifact: "artifacts/config/gt-cfg-006-minor-issues.yaml"
+artifact_sha256: "3b7a4e852a71508af4caa551993253690154cb5b1d4dd3da43e2c0153a76e06a"
+
+expected_verdict: PASS_WITH_NOTES
+
+findings:
+  - id: GT-036
+    description: "No inline comments explaining non-obvious configuration values"
+    location: >
+      evaluation.timeout_ms (line 44),
+      evaluation.max_retries (line 45),
+      defaults.event_buffer_size (line 53),
+      defaults.shutdown_grace_period_seconds (line 54)
+    severity: LOW
+    category: completeness
+    critic: completeness
+    notes: >
+      Several values whose choice is non-obvious lack explanatory comments.
+      evaluation.timeout_ms: 200 — why 200ms? Is this derived from a p99
+      latency budget? evaluation.max_retries: 2 — what happens on the third
+      failure: fail open or closed? defaults.event_buffer_size: 512 — tuning
+      rationale and what happens when the buffer fills (dropped events vs.
+      backpressure). defaults.shutdown_grace_period_seconds: 15 — should
+      match or exceed the Kubernetes terminationGracePeriodSeconds; the
+      relationship is undocumented. These are LOW severity documentation
+      gaps that do not impair correctness but reduce operability.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: yaml-config
+  complexity: low
+  rubric: agent-config
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

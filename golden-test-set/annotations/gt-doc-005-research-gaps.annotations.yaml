@@ -1,0 +1,86 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-005-research-gaps.md"
+artifact_sha256: "3d84765d1f5143263cbeb3898342e8236027acec0434959b90ce3ea0fae84627"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-046
+    description: >
+      Section 1.2 (Research Questions) explicitly lists 3 research questions:
+      RQ1 (task performance effects), RQ2 (moderating factors), and RQ3 (governance
+      and architecture effects on adoption). The Findings section addresses RQ1
+      (§3.1) and RQ2 (§3.2) directly. Section 3.3 is titled "Governance and
+      Architecture Effects" and maps to RQ3. However, the Discussion section (§5)
+      contains no subsection addressing RQ3 — it discusses RQ1 and RQ2 implications
+      in §5.1 and §5.2 but §5.3 references "Section 4" (gap analysis) which does
+      not exist in the document. The document structurally omits the discussion of
+      RQ3 findings even though data was collected.
+    location: "section 1.2 (3 RQs stated), section 5 Discussion (RQ3 not addressed in 5.1 or 5.2)"
+    severity: HIGH
+    category: completeness
+    critic: completeness
+    rubric_criterion: null
+    notes: >
+      RQ3 has findings in §3.3 but no corresponding discussion subsection in §5.
+      §5.1 covers "Theoretical Contributions" (RQ1/RQ2), §5.2 covers "Practical
+      Implications" (RQ1/RQ2), §5.3 references a "gap analysis" in a non-existent
+      Section 4. The document skips from Section 3 to Section 5 — there is no
+      Section 4 in the document.
+
+  - id: GT-047
+    description: >
+      The research report makes multiple causal claims throughout the document:
+      "trust calibration [...] was the strongest predictor of performance improvement"
+      (§3.2), "Organizations that invested in structured onboarding [...] saw 2.3×
+      higher sustained adoption" (Executive Summary), and "governance friction is
+      a first-order adoption barrier" (§5.2). These are causal or near-causal
+      claims supported by cross-sectional survey and interview data. However, the
+      document contains no Limitations section that addresses the inability of
+      cross-sectional designs to establish causality, sample representativeness,
+      self-report bias, or any other standard limitation of observational research.
+      §1.3 (Scope and Limitations) lists only topic scope exclusions, not
+      methodological limitations.
+    location: "document-wide — absent Limitations section; §1.3 addresses scope only, not methodology"
+    severity: HIGH
+    category: completeness
+    critic: completeness
+    rubric_criterion: null
+    notes: >
+      A research report making causal claims from survey + interview data must
+      include a limitations section addressing: cross-sectional design limitations,
+      self-report bias, sample representativeness across sectors, potential
+      confounding. The document's §1.3 is a scope section, not a limitations
+      section. §6 (Conclusion) also contains no caveats on causal inference.
+
+  - id: GT-048
+    description: >
+      Section 5.3 (Discussion, "Relationship to Gap Analysis Findings") states:
+      "As noted in Section 4, the gap analysis revealed several areas where our
+      findings diverge from prior literature expectations." There is no Section 4
+      in this document. The document numbers go 1 → 2 → 3 → 5 → 6. Section 4
+      is entirely absent. This is a dangling cross-reference to a section that
+      was either deleted, never written, or mis-numbered.
+    location: "section 5.3, first sentence"
+    severity: HIGH
+    category: correctness
+    critic: correctness
+    rubric_criterion: null
+    notes: >
+      The cross-reference to "Section 4" is a correctness finding (broken
+      reference), not just a completeness finding. The document structure
+      skips from §3 to §5 entirely. This suggests a section was deleted
+      without updating the cross-reference. Both the missing section
+      (completeness) and the broken reference (correctness) are issues,
+      but the broken reference is the more actionable finding.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: markdown-doc
+  complexity: high
+  rubric: research-synthesis
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

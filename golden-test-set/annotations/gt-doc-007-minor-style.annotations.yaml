@@ -1,0 +1,39 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-007-minor-style.md"
+artifact_sha256: "0a2aa92ae538a11c1d64f52d3e5c6826ddb12093ea3c7a7f8fac5e0bbe326745"
+
+expected_verdict: PASS_WITH_NOTES
+
+findings:
+  - id: GT-051
+    description: >
+      The "What's New in 2.3.0" section uses a mix of bullet point styles: lines
+      beginning with `*` (asterisk) and lines beginning with `-` (hyphen) are
+      interleaved within the same list. Specifically: `*` is used for "Added
+      AsyncSearchClient," "ClientConfig class," and "Performance improvements"
+      while `-` is used for "Pagination support" and "Improved error messages."
+      Standard Markdown style guides (and most linters) require consistent use
+      of a single bullet character within a list. Mixed styles reduce visual
+      consistency and may render inconsistently across Markdown parsers.
+    location: "section 'What's New in 2.3.0', bullet list"
+    severity: LOW
+    category: code_hygiene
+    critic: code_hygiene
+    rubric_criterion: null
+    notes: >
+      This is a genuine but minor style issue. The document is otherwise
+      well-structured, accurate, and complete. The mixed bullet style does not
+      affect comprehension or correctness — it is a formatting inconsistency
+      only. PASS_WITH_NOTES is the correct verdict because the document is
+      usable as-is; this finding warrants a note but not a revision request.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: markdown-doc
+  complexity: low
+  rubric: markdown-doc
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

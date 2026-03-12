@@ -1,0 +1,45 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-013-clean-crypto.py"
+artifact_sha256: "1b6a30141591bbd011d4f99e33cea264d6bfb747585641b9e5c141406f8c8462"
+
+expected_verdict: PASS
+
+findings: []
+
+false_positive_traps:
+  - description: >
+      `hashlib.md5()` usage in `content_fingerprint()`. MD5 is used here for
+      content deduplication — a non-security purpose where collision resistance
+      is explicitly not required. The function docstring explains this reasoning
+      in detail, and the function is named `content_fingerprint` (not a password
+      or integrity check). Flagging this as a security issue would be incorrect.
+    location: "line 50"
+    notes: >
+      MD5 is only inappropriate for security-sensitive operations (password
+      hashing, digital signatures, tamper detection against adversarial input).
+      For deduplication of uploads where the adversary is not trying to produce
+      collisions, MD5 is acceptable and widely used (e.g., S3 ETag). The module
+      also provides `content_fingerprint_sha256()` for contexts where a stronger
+      algorithm is preferred. A noqa comment is included to suppress linter
+      warnings that would fire without context.
+
+  - description: >
+      Variable named `evaluator` at the bottom of the module. This is a dict
+      mapping rule type names to callable functions. It does NOT use Python's
+      built-in `eval()` function anywhere in the file. Naive pattern matching on
+      the string "eval" in variable names would produce a false positive.
+    location: "line 198-201"
+    notes: >
+      `evaluator` is a plain dict of callables. `eval()` does not appear anywhere
+      in the file. The naming is coincidental to the domain (a rule evaluation
+      registry). No code execution or dynamic evaluation occurs.
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: high
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

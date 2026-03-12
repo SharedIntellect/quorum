@@ -1,0 +1,5 @@
+relationships:
+  - source: README.md
+    target: cli.py
+    type: documentation
+    description: "README.md documents CLI flags, default values, and usage examples; cli.py is the authoritative implementation — flag names and defaults in the README must match the Click option definitions"

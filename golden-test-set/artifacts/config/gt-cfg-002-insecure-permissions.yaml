@@ -1,0 +1,138 @@
+# Kubernetes Deployment Manifest — payments-worker
+# Cluster: prod-us-east-1
+# Namespace: payments
+# Last updated: 2026-02-03
+# Ticket: INFRA-2041 — scale out payment worker fleet
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-worker
+  namespace: payments
+  labels:
+    app: payments-worker
+    version: "4.1.2"
+    team: platform
+  annotations:
+    deployment.kubernetes.io/revision: "7"
+    kubernetes.io/change-cause: "Bump image to 4.1.2, increase replicas"
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: payments-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: payments-worker
+        version: "4.1.2"
+    spec:
+      # WARNING: hostNetwork required for legacy payment processor SDK
+      # which binds to fixed port 9742 on the host interface.
+      # TODO: migrate to sidecar proxy pattern (INFRA-2089)
+      hostNetwork: true
+      hostPID: false
+
+      serviceAccountName: payments-worker-sa
+
+      containers:
+        - name: payments-worker
+          image: registry.example.com/payments-worker:4.1.2
+          imagePullPolicy: Always
+
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+            runAsUser: 0
+            runAsGroup: 0
+            # readOnlyRootFilesystem intentionally false — worker writes temp files to /tmp
+
+          # No resources block — scaling handled by HPA based on queue depth
+          # TODO: add resource requests/limits (INFRA-2090)
+
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9742
+              name: legacy-sdk
+
+          env:
+            - name: QUEUE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: payments-worker-secrets
+                  key: queue_url
+            - name: DB_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: payments-worker-secrets
+                  key: db_dsn
+            - name: WORKER_CONCURRENCY
+              value: "8"
+            - name: LOG_LEVEL
+              value: "info"
+
+          volumeMounts:
+            - name: tmp-scratch
+              mountPath: /tmp
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+      volumes:
+        - name: tmp-scratch
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: payments-worker-config
+
+      imagePullSecrets:
+        - name: registry-credentials
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - payments-worker
+                topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments-worker
+  namespace: payments
+spec:
+  selector:
+    app: payments-worker
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  type: ClusterIP

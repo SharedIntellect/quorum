@@ -1,0 +1,71 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-003-command-injection.py"
+artifact_sha256: "c9febf0ea5a72162d8acb2c7062890964f096286cf43b5bc91ad0e541266d58f"
+
+expected_verdict: REJECT
+
+findings:
+  - id: GT-004
+    description: >
+      Command injection via `os.system()` with user-controlled input. In
+      `download_artifact()`, both `artifact_name` and `version` are obtained from
+      CLI arguments (ultimately from external callers) and embedded directly into a
+      shell command string passed to `os.system()`. An attacker who controls either
+      argument can inject arbitrary shell commands (e.g.,
+      `artifact_name="foo; rm -rf /"`).
+    location: "line 35-40"
+    severity: CRITICAL
+    category: security
+    critic: security
+    notes: >
+      `os.system()` passes its argument to a shell, so any shell metacharacters in
+      the interpolated values are executed. The fix is to use
+      `subprocess.run(["curl", "-fsSL", url, "-o", str(dest_path)], check=True)`
+      with the URL and destination path constructed separately from validated inputs.
+
+  - id: GT-005
+    description: >
+      `subprocess.run()` called with `shell=True` and an unsanitized argument. In
+      `run_migrations()`, `migration_dir` comes from a CLI argument and is
+      interpolated into `migrate_cmd` which is then executed with `shell=True`.
+      An operator or CI system that passes a crafted `--migration-dir` value can
+      inject shell commands.
+    location: "line 52-60"
+    severity: HIGH
+    category: security
+    critic: security
+    notes: >
+      `shell=True` with a string command is equivalent to `os.system()` in terms
+      of injection surface. The fix is to pass a validated list:
+      `subprocess.run(["alembic", "--config", config_path, "upgrade", "head"], ...)`.
+      The `db_url` is passed via the environment (`DATABASE_URL`), which is correct
+      and not a finding.
+
+false_positive_traps:
+  - description: >
+      `subprocess.run(["ls", "-la"], check=True)` on line 72 — fully controlled,
+      hardcoded arguments with no user input. This is a textbook safe subprocess call.
+    location: "line 72"
+    notes: >
+      The command is a string list with no dynamic content. `shell=True` is not used.
+      Flagging this as injection would be a false positive on the presence of
+      `subprocess.run` alone.
+
+  - description: >
+      `restart_service()` and `check_service_status()` use `subprocess.run` with
+      list arguments derived from `_safe_service_name()`, which validates against
+      an explicit allow-list. The service name is not user-controlled in the
+      injection sense — it is constrained to `{"api", "worker", "scheduler", "gateway"}`.
+    location: "line 44-56"
+    notes: >
+      Allow-list validation before subprocess is the correct pattern. Not a finding.
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: high
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

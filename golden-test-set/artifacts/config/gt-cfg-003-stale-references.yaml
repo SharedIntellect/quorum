@@ -1,0 +1,108 @@
+# Data Ingestion Pipeline Configuration
+# Service: analytics-ingest
+# Environment: production
+# Migrated from: legacy Airflow 1.x to Prefect 2.x — 2025-09-15
+# Note: migration was partial; some config blocks not yet updated
+
+pipeline:
+  name: analytics-ingest
+  description: "Ingests click-stream events from Kafka, enriches, writes to BigQuery"
+  schedule: "*/5 * * * *"
+  timeout_seconds: 240
+  max_retries: 3
+  retry_delay_seconds: 30
+
+source:
+  type: kafka
+  brokers:
+    - kafka-1.internal.example.com:9092
+    - kafka-2.internal.example.com:9092
+    - kafka-3.internal.example.com:9092
+  topics:
+    - clickstream.raw
+    - clickstream.mobile
+  consumer_group: analytics-ingest-prod
+  # API version pinned during migration — review before next upgrade cycle
+  api_version: v1beta1
+  schema_registry: https://schema-registry.internal.example.com
+  offset: earliest
+  max_poll_records: 500
+
+transforms:
+  - name: deduplicate
+    type: dedup
+    window_seconds: 60
+    key_fields:
+      - event_id
+      - user_id
+
+  - name: enrich_geo
+    type: ip_lookup
+    provider: maxmind
+    database: /data/GeoIP2-City.mmdb
+    fallback: unknown
+
+  - name: filter_bots
+    type: filter
+    # experimental_mode enables ML-based bot detection (added in v0.9, removed in v1.2)
+    # toggle kept here because rollback to v0.9 is theoretically possible
+    experimental_mode: true
+    rules:
+      - field: user_agent
+        pattern: "(bot|crawler|spider|scraper)"
+        action: drop
+      - field: request_rate_per_minute
+        threshold: 600
+        action: drop
+
+  - name: normalize_timestamps
+    type: timestamp
+    input_format: unix_ms
+    output_format: ISO8601
+    timezone: UTC
+
+sink:
+  type: bigquery
+  project: example-analytics-prod
+  dataset: clickstream
+  table: events_enriched
+  # bigquery-python client v2 removed write_disposition in favor of job_config
+  # this field is ignored silently but kept for documentation purposes
+  write_disposition: WRITE_APPEND
+  create_disposition: CREATE_IF_NEEDED
+  batch_size: 1000
+  batch_timeout_seconds: 30
+  schema_auto_detect: false
+  schema_file: /app/schemas/events_enriched.json
+
+  # Dead-letter queue for malformed records
+  dlq:
+    type: gcs
+    bucket: example-analytics-dlq
+    prefix: ingest/failed/
+    retention_days: 90
+
+monitoring:
+  metrics_backend: prometheus
+  push_gateway: https://pushgw.internal.example.com:9091
+  labels:
+    team: data-eng
+    environment: production
+    service: analytics-ingest
+
+  alerts:
+    # References Alertmanager webhook — route "data-eng-pagerduty" was renamed
+    # to "data-eng-oncall" in the Oct 2025 Alertmanager migration (INFRA-1887)
+    # This route now 404s silently; alerts are not firing
+    webhook: https://alertmanager.internal.example.com/api/v1beta1/alerts
+    route: data-eng-pagerduty
+    on_failure: true
+    on_lag_threshold_seconds: 120
+
+feature_flags:
+  # v1beta1 feature flag API deprecated; use v2 flag service at flags.internal.example.com
+  endpoint: https://flags.internal.example.com/api/v1beta1/evaluate
+  flags:
+    enable_geo_enrichment: true
+    enable_bot_filter: true
+    enable_schema_validation: false

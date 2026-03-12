@@ -1,0 +1,74 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-006-missing-error-handling.py"
+artifact_sha256: "329ec9024428fc12f2f44609c6080db1fc32bf8419d8f71e0572440f443e273a"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-009
+    description: >
+      No exception handling for `FileNotFoundError` (or `PermissionError`) in
+      `iter_csv_records()`. The function opens the file with a bare `open()` call
+      and explicitly documents that it "does not handle missing files." When called
+      from `process_file()` → `run_pipeline()`, the exception propagates past the
+      `except Exception` catch in `run_pipeline()` (which does catch it at the
+      pipeline level), but the docstring of `iter_csv_records` misleads callers
+      that a valid path is a precondition. More critically, the file handle `fh` is
+      not managed with a context manager — if the iterator is abandoned mid-read
+      (e.g., caller breaks out of the loop), the file descriptor is leaked.
+    location: "line 36-42"
+    severity: HIGH
+    category: completeness
+    critic: completeness
+    notes: >
+      The fix is to use `with open(filepath, ...) as fh:` and yield inside the
+      context manager, or convert to `yield from csv.DictReader(...)` with proper
+      resource management. The `FileNotFoundError` should be caught and re-raised
+      with a descriptive message, or handled at the call site with explicit logging.
+
+  - id: GT-010
+    description: >
+      Unchecked return value from the enrichment API call. In `enrich_record()`,
+      `response.json().get("enrichment", {})` is called without first checking
+      `response.status_code`. If the API returns a 4xx or 5xx response, `response.json()`
+      may raise a `JSONDecodeError` (if the body is not JSON) or return an error
+      payload that does not contain `"enrichment"`. In the latter case, the function
+      silently returns `{**record, "enrichment": {}}` as if enrichment succeeded,
+      masking the failure. The outer retry loop in `enrich_batch()` only catches
+      `requests.RequestException`, not `ValueError` from `json()` or silent API errors.
+    location: "line 66-71"
+    severity: HIGH
+    category: completeness
+    critic: completeness
+    notes: >
+      The fix is to call `response.raise_for_status()` before accessing
+      `response.json()`, which converts HTTP error codes into `requests.HTTPError`
+      (a subclass of `requests.RequestException`) that the retry loop will catch.
+
+  - id: GT-011
+    description: >
+      Missing timeout on the HTTP request in `enrich_record()`. The `requests.post()`
+      call has no `timeout` parameter. If the enrichment service hangs (e.g., during
+      a deployment or partial outage), the worker process blocks indefinitely on that
+      single record, stalling the entire pipeline with no way to recover other than
+      killing the process.
+    location: "line 67"
+    severity: MEDIUM
+    category: completeness
+    critic: completeness
+    notes: >
+      Add `timeout=(5, 30)` (connect, read) to the `requests.post()` call.
+      `requests.Timeout` is already a subclass of `requests.RequestException`, so
+      the existing retry logic in `enrich_batch()` would handle it automatically.
+
+false_positive_traps: []
+
+metadata:
+  source: modified-natural
+  domain: python-code
+  complexity: medium
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

@@ -1,0 +1,116 @@
+# Microservice Runtime Configuration — order-processor
+# Environment: production
+# Deployed via: Helm chart 2.9.1
+# Config last modified: 2026-02-28
+# Ticket: OPS-3312 — increase throughput, tune retry policy
+
+service:
+  name: order-processor
+  version: "7.2.0"
+  profile: production
+  instance_id: "${POD_NAME}"
+  region: us-west-2
+
+server:
+  port: 8080
+  grpc_port: 9090
+  # Maximum time the server will wait for a single request to complete
+  # before returning a deadline-exceeded error to the caller
+  max_timeout_seconds: 45
+  read_timeout_seconds: 30
+  write_timeout_seconds: 30
+  idle_timeout_seconds: 120
+  max_header_bytes: 8192
+  max_connections: 0  # 0 = unlimited; connection count governed by k8s resource limits
+
+database:
+  driver: postgres
+  host: orders-db.internal.example.com
+  port: 5432
+  name: orders_prod
+  user_secret: vault:secret/data/order-processor/db#username
+  pass_secret: vault:secret/data/order-processor/db#password
+  max_open_conns: 40
+  max_idle_conns: 10
+  conn_max_lifetime_seconds: 300
+  conn_max_idle_time_seconds: 60
+
+messaging:
+  broker: kafka
+  brokers:
+    - kafka-1.internal.example.com:9092
+    - kafka-2.internal.example.com:9092
+    - kafka-3.internal.example.com:9092
+  consumer_group: order-processor-prod
+  topics:
+    inbound: orders.submitted
+    outbound: orders.processed
+    dlq: orders.failed
+
+retry:
+  # Retry policy for downstream calls (payment-service, inventory-service)
+  # Per-attempt timeout governs each individual attempt
+  # Total retry budget = retry_count * per_retry_timeout_seconds
+  retry_count: 5
+  per_retry_timeout_seconds: 12
+  # NOTE: total retry budget = 5 * 12 = 60s, which EXCEEDS max_timeout_seconds (45s)
+  # In practice the circuit will hit the global timeout at ~45s and abort mid-retry.
+  # The last 1-2 retry attempts will never execute. Tracked in OPS-3315.
+  backoff_strategy: exponential
+  backoff_base_seconds: 1
+  backoff_max_seconds: 10
+  jitter: true
+
+circuit_breaker:
+  enabled: true
+  failure_threshold: 5
+  success_threshold: 2
+  timeout_seconds: 30
+  half_open_max_calls: 3
+
+cache:
+  type: redis
+  host_secret: vault:secret/data/order-processor/redis#host
+  port: 6379
+  db: 0
+  ttl_seconds: 300
+  max_retries: 3
+  pool_size: 20
+
+observability:
+  # Log level set to DEBUG — captures full request/response bodies including PII
+  # Left from debugging OPS-3298; not reverted before deploy
+  log_level: debug
+  log_format: json
+  log_output: stdout
+
+  tracing:
+    enabled: true
+    exporter: otlp
+    endpoint: https://otel-collector.internal.example.com:4318
+    sample_rate: 0.05
+
+  metrics:
+    enabled: true
+    exporter: prometheus
+    path: /metrics
+    port: 9090
+
+feature_flags:
+  service: https://flags.internal.example.com
+  cache_ttl_seconds: 30
+  flags:
+    enable_async_fulfillment: true
+    enable_fraud_scoring: true
+    enable_split_shipment: false
+
+rate_limiting:
+  enabled: true
+  requests_per_second: 500
+  burst: 100
+  strategy: token_bucket
+
+worker_pool:
+  size: 20
+  queue_depth: 500
+  drain_timeout_seconds: 60

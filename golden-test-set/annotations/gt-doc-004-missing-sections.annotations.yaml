@@ -1,0 +1,80 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-004-missing-sections.md"
+artifact_sha256: "1d47a2d6502ff2f7d6d0a7c814760c4376849ea56b242b59d5784bb8900a9c67"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-043
+    description: >
+      The API specification documents 4 endpoints (Search Documents, Get Collection
+      Info, List Collections, Suggest) but provides error response documentation
+      for only 0 of the 4 endpoints. The "Search Documents" endpoint documents
+      success response (200 OK) only. Neither the error conditions (invalid
+      collection_id, malformed query, collection not found, server errors) nor
+      the HTTP status codes and error body schema for failure cases are documented
+      for any of the 4 endpoints. Consumers cannot implement correct error handling
+      without this information.
+    location: "section 'Endpoints', all 4 endpoint subsections — no error response tables present"
+    severity: HIGH
+    category: completeness
+    critic: completeness
+    rubric_criterion: null
+    notes: >
+      None of the 4 endpoints document error responses. The Response Headers section
+      references X-RateLimit-* headers suggesting rate limiting exists but no
+      429 error response is documented. The SDK example shows typed exception
+      classes (CollectionNotFoundError, RateLimitError) implying these error
+      conditions exist and matter to consumers, but the API spec itself does
+      not document them.
+
+  - id: GT-044
+    description: >
+      The API specification contains no authentication section. Authentication
+      is a critical cross-cutting concern for any API; consumers need to know
+      what authentication mechanisms are accepted, what credentials to supply,
+      and what happens when authentication fails (401 vs 403, error body schema).
+      The document jumps from Overview directly to Endpoints with no authentication
+      documentation whatsoever. The Request Headers table mentions no auth headers.
+    location: "document-wide — absent section; Overview → Endpoints transition"
+    severity: HIGH
+    category: completeness
+    critic: completeness
+    rubric_criterion: null
+    notes: >
+      The document mentions in the Versioning section that "v1 is deprecated" and
+      in the SDK example that `api_key="your-api-key"` is passed to the client,
+      but the spec itself has no section explaining how authentication works,
+      what headers carry credentials, or what the 401/403 response looks like.
+      This is a critical omission for any API spec.
+
+  - id: GT-045
+    description: >
+      The Response Headers section lists `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+      and `X-RateLimit-Reset` headers, clearly indicating rate limiting is
+      implemented. However, the specification contains no section documenting
+      rate limiting behavior: what the limits are, what tier the caller is on,
+      what happens when limits are exceeded (HTTP 429 response, Retry-After),
+      or how rate limit tiers differ by client type. The headers are listed
+      but their context is absent.
+    location: "section 'Request / Response Headers', Response Headers table"
+    severity: MEDIUM
+    category: completeness
+    critic: completeness
+    rubric_criterion: null
+    notes: >
+      The presence of rate limit headers is documented but the rate limiting policy
+      is not. This is a MEDIUM rather than HIGH because the headers at least signal
+      that rate limiting exists; a consumer can infer behavior from the headers
+      alone, but cannot know the actual limits or tiers.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: markdown-doc
+  complexity: low
+  rubric: markdown-doc
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

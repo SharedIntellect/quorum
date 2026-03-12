@@ -1,0 +1,40 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-004-insecure-deserialization.py"
+artifact_sha256: "ef53b870f315c0d1a7db9e67c29f47c7a1976be55468ad45a49c9a142379386e"
+
+expected_verdict: REJECT
+
+findings:
+  - id: GT-006
+    description: >
+      `pickle.loads()` called on data received from a network socket. In the `get()`
+      method of `CacheClient`, the raw response bytes from the cache server are
+      deserialized with `pickle.loads()` when the type tag byte is `0x02`. The cache
+      server is on the network (`cache.internal.example.com:6380`) and any party who
+      can write to the cache or intercept/replay cache responses can deliver a
+      crafted pickle payload that executes arbitrary code during deserialization.
+    location: "line 108-113"
+    severity: CRITICAL
+    category: security
+    critic: security
+    notes: >
+      `pickle` deserialization is inherently unsafe against untrusted input because
+      pickle opcodes can call arbitrary Python callables during object reconstruction.
+      The comment on line 112-113 explicitly acknowledges that "external callers on
+      the network segment" may have written the data. The fix is to use a safe
+      serialization format (JSON, MessagePack, or Protocol Buffers) for all cross-
+      process/cross-network data. If full object fidelity is required, the cache
+      must be treated as a trusted, authenticated channel with strict input
+      validation before deserialization.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: medium
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

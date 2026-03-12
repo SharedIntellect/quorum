@@ -1,0 +1,146 @@
+{
+  "_meta": {
+    "name": "identity-service-release",
+    "description": "Build, test, and release pipeline for identity-service",
+    "version": "4.1.0",
+    "owner": "identity-team@corp.example.com",
+    "last_updated": "2026-03-08",
+    "security_review": "SEC-0901 (2026-03-07)"
+  },
+
+  "pipeline": {
+    "name": "identity-service-release",
+    "default_branch": "main",
+    "protected_branches": ["main", "release/*"],
+
+    "triggers": [
+      { "type": "push", "branches": ["main", "release/*"] },
+      { "type": "pull_request", "target_branches": ["main"] },
+      { "type": "schedule", "cron": "0 6 * * 1-5", "timezone": "UTC" }
+    ],
+
+    "concurrency": {
+      "group": "identity-service-${BRANCH_NAME}",
+      "cancel_in_progress": true
+    }
+  },
+
+  "vault": {
+    "address": "https://vault.internal.example.com",
+    "auth_method": "kubernetes",
+    "role": "ci-identity-service",
+    "namespace": "platform",
+    "secret_path": "secret/data/ci/identity-service"
+  },
+
+  "stages": [
+    {
+      "name": "lint-and-type-check",
+      "image": "python:3.12-slim",
+      "timeout_minutes": 10,
+      "cache": {
+        "key": "pip-${hashFiles('requirements*.txt')}",
+        "paths": [".pip-cache/"]
+      },
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PIP_CACHE_DIR": ".pip-cache"
+      },
+      "steps": [
+        { "name": "install-dev-deps", "run": "pip install -r requirements-dev.txt --cache-dir .pip-cache" },
+        { "name": "ruff-lint", "run": "ruff check src/ tests/" },
+        { "name": "mypy", "run": "mypy src/ --strict --ignore-missing-imports" },
+        { "name": "bandit-sast", "run": "bandit -r src/ -ll -q" }
+      ]
+    },
+    {
+      "name": "unit-tests",
+      "image": "python:3.12-slim",
+      "timeout_minutes": 20,
+      "env": {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PIP_CACHE_DIR": ".pip-cache",
+        "DATABASE_URL": { "vault": "secret/data/ci/identity-service#test_db_url" },
+        "JWT_PRIVATE_KEY": { "vault": "secret/data/ci/identity-service#jwt_private_key_pem" }
+      },
+      "steps": [
+        { "name": "install-deps", "run": "pip install -r requirements.txt -r requirements-dev.txt --cache-dir .pip-cache" },
+        { "name": "pytest", "run": "pytest tests/unit/ -v --tb=short --cov=src --cov-report=xml --cov-fail-under=85" }
+      ],
+      "artifacts": {
+        "paths": ["coverage.xml"],
+        "expire_in": "7 days"
+      }
+    },
+    {
+      "name": "integration-tests",
+      "image": "python:3.12-slim",
+      "timeout_minutes": 30,
+      "services": [
+        { "name": "postgres", "image": "postgres:16-alpine", "env": { "POSTGRES_DB": "identity_test", "POSTGRES_USER": "test", "POSTGRES_PASSWORD": { "vault": "secret/data/ci/identity-service#integration_db_password" } } },
+        { "name": "redis", "image": "redis:7-alpine" }
+      ],
+      "env": {
+        "DATABASE_URL": "postgres://test:${INTEGRATION_DB_PASSWORD}@postgres:5432/identity_test",
+        "REDIS_URL": "redis://redis:6379/0",
+        "JWT_PRIVATE_KEY": { "vault": "secret/data/ci/identity-service#jwt_private_key_pem" },
+        "INTEGRATION_DB_PASSWORD": { "vault": "secret/data/ci/identity-service#integration_db_password" }
+      },
+      "steps": [
+        { "name": "wait-for-services", "run": "python scripts/wait_for_services.py --timeout 30" },
+        { "name": "db-migrate", "run": "alembic upgrade head" },
+        { "name": "pytest-integration", "run": "pytest tests/integration/ -v --tb=short" }
+      ]
+    },
+    {
+      "name": "build-image",
+      "image": "docker:25-dind",
+      "timeout_minutes": 20,
+      "only": ["main", "release/*"],
+      "env": {
+        "DOCKER_REGISTRY": "registry.example.com",
+        "REGISTRY_USER": { "vault": "secret/data/ci/identity-service#registry_user" },
+        "REGISTRY_PASSWORD": { "vault": "secret/data/ci/identity-service#registry_password" }
+      },
+      "steps": [
+        { "name": "docker-login", "run": "echo \"${REGISTRY_PASSWORD}\" | docker login ${DOCKER_REGISTRY} -u ${REGISTRY_USER} --password-stdin" },
+        { "name": "build", "run": "docker build --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) --build-arg GIT_COMMIT=${CI_COMMIT_SHA} -t ${DOCKER_REGISTRY}/identity-service:${CI_COMMIT_SHA} -t ${DOCKER_REGISTRY}/identity-service:latest ." },
+        { "name": "scan", "run": "trivy image --exit-code 1 --severity HIGH,CRITICAL ${DOCKER_REGISTRY}/identity-service:${CI_COMMIT_SHA}" },
+        { "name": "push", "run": "docker push ${DOCKER_REGISTRY}/identity-service:${CI_COMMIT_SHA} && docker push ${DOCKER_REGISTRY}/identity-service:latest" }
+      ]
+    },
+    {
+      "name": "release",
+      "image": "python:3.12-slim",
+      "timeout_minutes": 10,
+      "only": ["main"],
+      "when": "manual",
+      "env": {
+        "GITHUB_TOKEN": { "vault": "secret/data/ci/identity-service#github_token" },
+        "PYPI_API_TOKEN": { "vault": "secret/data/ci/identity-service#pypi_token" }
+      },
+      "steps": [
+        { "name": "tag-release", "run": "python scripts/tag_release.py --version ${RELEASE_VERSION}" },
+        { "name": "build-dist", "run": "python -m build --sdist --wheel" },
+        { "name": "publish", "run": "twine upload --non-interactive dist/* --username __token__ --password ${PYPI_API_TOKEN}" },
+        { "name": "create-gh-release", "run": "gh release create ${RELEASE_VERSION} --generate-notes --repo example-corp/identity-service" }
+      ]
+    }
+  ],
+
+  "notifications": {
+    "on_failure": {
+      "slack": {
+        "webhook": { "vault": "secret/data/ci/identity-service#slack_webhook" },
+        "channel": "#identity-team-alerts",
+        "mention": "@identity-oncall"
+      }
+    },
+    "on_success": {
+      "slack": {
+        "webhook": { "vault": "secret/data/ci/identity-service#slack_webhook" },
+        "channel": "#deployments"
+      }
+    }
+  }
+}
