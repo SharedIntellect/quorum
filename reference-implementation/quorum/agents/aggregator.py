@@ -7,7 +7,7 @@ Aggregator Agent — Deduplicates findings, resolves conflicts, produces verdict
 The Aggregator:
 1. Collects all CriticResults
 2. Deduplicates findings that describe the same issue from different critics
-3. Recalibrates confidence from inter-critic agreement
+3. Computes criteria coverage from per-critic evaluation counts
 4. Assigns the final Verdict (PASS / PASS_WITH_NOTES / REVISE / REJECT)
 
 The verdict is determined by the highest severity findings:
@@ -152,31 +152,21 @@ class AggregatorAgent:
         findings: list[Finding],
     ) -> float:
         """
-        Calculate overall confidence from:
-        - Average critic confidence
-        - Agreement between critics (higher agreement = higher confidence)
-        - Penalty for skipped critics
+        Calculate overall coverage from criteria counts across all critics.
+
+        Returns the ratio of total criteria evaluated to total criteria in scope.
+        Skipped critics contribute 0 evaluated out of their expected criteria.
+        This is an honest coverage metric, not a fabricated probability.
         """
-        active_results = [r for r in results if not r.skipped]
-        if not active_results:
+        total_criteria = sum(r.criteria_total for r in results)
+        evaluated_criteria = sum(
+            r.criteria_evaluated for r in results if not r.skipped
+        )
+
+        if total_criteria == 0:
             return 0.0
 
-        avg_confidence = sum(r.confidence for r in active_results) / len(active_results)
-
-        # Penalize for skipped critics
-        skipped_count = sum(1 for r in results if r.skipped)
-        skip_penalty = 0.05 * skipped_count
-
-        # Bonus for inter-critic agreement (same severity findings appear in multiple critics)
-        agreement_bonus = 0.0
-        if len(active_results) > 1 and findings:
-            multi_source = sum(
-                1 for f in findings if "," in f.critic
-            )
-            agreement_bonus = min(0.1, 0.02 * multi_source)
-
-        confidence = max(0.0, min(1.0, avg_confidence - skip_penalty + agreement_bonus))
-        return round(confidence, 3)
+        return round(evaluated_criteria / total_criteria, 3)
 
     def _assign_verdict(self, report: AggregatedReport) -> Verdict:
         """

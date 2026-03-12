@@ -119,15 +119,36 @@ def check_hardcoded_counts(lines: list[str], shipped_count: int, file_path: Path
     count_pattern = re.compile(r'\b(\d+)\s+critics?\b', re.IGNORECASE)
     # Also match "ships with N", "ships N critics"
     ships_pattern = re.compile(r'ship[s]?\s+(?:with\s+)?(\d+)', re.IGNORECASE)
+    # Also match "N/9 critics" or "N of 9 critics"
+    fraction_pattern = re.compile(r'\b(\d+)\s*[/]\s*9\s+critics?\b', re.IGNORECASE)
+    # Also match "N/9" in context of shipped/implemented
+    fraction_shipped_pattern = re.compile(r'\b(\d+)\s*[/]\s*9\s+(?:critics?\s+)?(?:shipped|implemented|live|built)', re.IGNORECASE)
 
     for i, line in enumerate(lines, 1):
         line_lower = line.lower()
-        # Skip lines that are clearly talking about the target architecture (9 critics)
-        if "9" in line and ("target" in line_lower or "architecture" in line_lower or "full" in line_lower):
+        # Skip lines that are clearly talking about the target architecture (e.g., "9 critics total")
+        # But don't skip lines with fraction patterns like "4/9 critics shipped"
+        if re.search(r'\b9\s+critics?\b', line, re.IGNORECASE) and \
+           ("target" in line_lower or "full" in line_lower) and \
+           not re.search(r'\d+\s*/\s*9', line):
             continue
         # Skip lines about thread pool / parallel limits (e.g., "max 4 critics in parallel")
-        if "parallel" in line_lower or "threadpool" in line_lower or "max" in line_lower:
+        # But don't skip lines with fraction patterns like "4/9 critics"
+        if ("parallel" in line_lower or "threadpool" in line_lower or "max" in line_lower) \
+           and not re.search(r'\d+\s*/\s*9', line):
             continue
+
+        # Flag ANY "N/9 critics" or "N of 9" fraction — policy: never expose total target count
+        fraction_found = False
+        for frac_pat in [fraction_pattern, fraction_shipped_pattern]:
+            for match in frac_pat.finditer(line):
+                if not fraction_found:
+                    findings.append(
+                        f"  {file_path}:{i}: Remove target denominator "
+                        f"(policy: don't expose total planned count): "
+                        f"{line.strip()[:120]}"
+                    )
+                    fraction_found = True
 
         for pattern in [count_pattern, ships_pattern]:
             for match in pattern.finditer(line):
@@ -229,15 +250,98 @@ def check_roadmap_shipped(
     return findings
 
 
+def check_version_consistency(repo_root: Path, manifest_version: str) -> list[str]:
+    """Check that version strings across the repo match the manifest version."""
+    findings: list[str] = []
+
+    # Check pyproject.toml
+    pyproject = repo_root / "reference-implementation" / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            content = pyproject.read_text(encoding="utf-8")
+            version_match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
+            if version_match and version_match.group(1) != manifest_version:
+                findings.append(
+                    f"  pyproject.toml: version=\"{version_match.group(1)}\" "
+                    f"(manifest={manifest_version})"
+                )
+        except OSError:
+            pass
+
+    # Check README for badge version mismatches
+    readme = repo_root / "README.md"
+    if readme.exists():
+        try:
+            content = readme.read_text(encoding="utf-8")
+            # Match badge patterns like: badge/version-v0.5.3 or badge/v0.5.3
+            badge_pattern = re.compile(r'badge[/](?:version-)?v?(\d+\.\d+\.\d+)')
+            for match in badge_pattern.finditer(content):
+                badge_ver = match.group(1)
+                if badge_ver != manifest_version:
+                    findings.append(
+                        f"  README.md: badge version \"{badge_ver}\" "
+                        f"(manifest={manifest_version})"
+                    )
+        except OSError:
+            pass
+
+    return findings
+
+
+def check_depth_config_claims(
+    lines: list[str], manifest: dict[str, Any], file_path: Path
+) -> list[str]:
+    """Flag claims about depth configs that don't match the manifest."""
+    findings: list[str] = []
+    depth_configs = manifest.get("depth_configs", {})
+    if not depth_configs:
+        return findings
+
+    callable_critics = {
+        name for name, info in manifest.get("critics", {}).items()
+        if info.get("callable", False)
+    }
+    callable_count = len(callable_critics)
+
+    for i, line in enumerate(lines, 1):
+        line_lower = line.lower()
+
+        # Check for "standard: N critics" or "standard depth runs N"
+        for depth_name, critic_list in depth_configs.items():
+            depth_pattern = re.compile(
+                rf'{depth_name}\s*[:=|—–-]\s*(\d+)\s+critics?',
+                re.IGNORECASE
+            )
+            for match in depth_pattern.finditer(line):
+                claimed = int(match.group(1))
+                actual = len(critic_list)
+                if claimed != actual:
+                    findings.append(
+                        f"  {file_path}:{i}: {depth_name} depth claims "
+                        f"{claimed} critics (actual={actual}): "
+                        f"{line.strip()[:120]}"
+                    )
+
+    return findings
+
+
 def validate_docs(repo_root: Path) -> list[str]:
     """Run all validation checks and return list of findings."""
     manifest = load_manifest(repo_root)
     shipped = get_critics_by_status(manifest, "shipped")
     shipped_count = len(shipped)
+    manifest_version = manifest.get("version", "unknown")
 
     md_files = find_md_files(repo_root)
 
     all_findings: list[str] = []
+
+    # Version consistency check
+    version_findings = check_version_consistency(repo_root, manifest_version)
+    if version_findings:
+        all_findings.append("VERSION MISMATCH:")
+        all_findings.extend(version_findings)
+
     for md_file in md_files:
         lines = read_file_lines(md_file)
         if lines is None:
@@ -247,6 +351,7 @@ def validate_docs(repo_root: Path) -> list[str]:
         all_findings.extend(check_hardcoded_counts(lines, shipped_count, rel_path))
         all_findings.extend(check_stale_status_markers(lines, shipped, rel_path))
         all_findings.extend(check_roadmap_shipped(lines, shipped, rel_path))
+        all_findings.extend(check_depth_config_claims(lines, manifest, rel_path))
 
     return all_findings
 
@@ -263,15 +368,32 @@ def main() -> int:
     shipped_count = len(shipped)
     manifest_version = manifest.get("version", "unknown")
 
+    callable_critics = {
+        name for name, info in manifest.get("critics", {}).items()
+        if info.get("callable", False)
+    }
+    depth_configs = manifest.get("depth_configs", {})
+
     print(f"Manifest version: {manifest_version}")
     print(f"Shipped critics ({shipped_count}): {', '.join(shipped.keys())}")
+    print(f"Callable critics ({len(callable_critics)}): {', '.join(sorted(callable_critics))}")
     print(f"Planned critics ({len(planned)}): {', '.join(planned.keys())}")
+    if depth_configs:
+        for depth_name, critic_list in depth_configs.items():
+            print(f"  {depth_name}: {len(critic_list)} critics ({', '.join(critic_list)})")
     print()
 
     md_files = find_md_files(repo_root)
     print(f"Scanning {len(md_files)} markdown files...\n")
 
     all_findings: list[str] = []
+
+    # Version consistency check
+    version_findings = check_version_consistency(repo_root, manifest_version)
+    if version_findings:
+        all_findings.append("VERSION MISMATCH:")
+        all_findings.extend(version_findings)
+
     for md_file in md_files:
         lines = read_file_lines(md_file)
         if lines is None:
@@ -281,6 +403,7 @@ def main() -> int:
         all_findings.extend(check_hardcoded_counts(lines, shipped_count, rel_path))
         all_findings.extend(check_stale_status_markers(lines, shipped, rel_path))
         all_findings.extend(check_roadmap_shipped(lines, shipped, rel_path))
+        all_findings.extend(check_depth_config_claims(lines, manifest, rel_path))
 
     if all_findings:
         print(f"FINDINGS ({len(all_findings)}):\n")

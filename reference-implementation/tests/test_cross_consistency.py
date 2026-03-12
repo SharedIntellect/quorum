@@ -181,30 +181,18 @@ class TestFormatPhase1Context:
 # ── Estimate Confidence ───────────────────────────────────────────────────────
 
 
-class TestEstimateConfidence:
+class TestComputeCoverage:
     def test_no_relationships(self, critic):
-        assert critic._estimate_confidence([], 0) == 0.0
+        assert critic._compute_coverage(0, 0) == 0.0
 
-    def test_no_findings_moderate_high(self, critic):
-        assert critic._estimate_confidence([], 3) == 0.80
+    def test_full_coverage(self, critic):
+        assert critic._compute_coverage(3, 3) == 1.0
 
-    def test_all_grounded(self, critic):
-        findings = [make_finding(description="Issue with evidence")]
-        conf = critic._estimate_confidence(findings, 2)
-        assert conf > 0.5
-        assert conf <= 1.0
+    def test_partial_coverage(self, critic):
+        assert critic._compute_coverage(2, 4) == 0.5
 
-    def test_ungrounded_lower_confidence(self, critic):
-        grounded = make_finding(description="Good finding")
-        ungrounded = Finding(
-            severity=Severity.MEDIUM,
-            description="Ungrounded",
-            evidence=Evidence(tool="llm", result=""),
-            critic="cross_consistency",
-        )
-        conf = critic._estimate_confidence([grounded, ungrounded], 2)
-        grounded_only_conf = critic._estimate_confidence([grounded], 2)
-        assert conf < grounded_only_conf
+    def test_zero_total_returns_zero(self, critic):
+        assert critic._compute_coverage(0, 0) == 0.0
 
 
 # ── Parse Findings ────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 This guide walks through building Quorum from the architectural spec. It's structured as a reference walkthrough, not a copy-paste tutorial. The goal is understanding the patterns so you can adapt them to your stack.
 
-> **Implementation Status (v0.5.2):** This guide describes the full target architecture. The reference implementation ships 4/9 critics, the fixer (proposal mode), parallel execution, and pre-screen integration. Sections marked 🔜 describe planned components. See `SPEC.md §3` for the authoritative status matrix.
+> **Implementation Status (v0.6.0):** This guide describes the full target architecture. The reference implementation ships 6 critics (5 callable in the pipeline), the fixer (proposal mode), parallel execution, batch processing, and pre-screen integration. Sections marked 🔜 describe planned components. See `critic-status.yaml` for the authoritative status matrix.
 
 ---
 
