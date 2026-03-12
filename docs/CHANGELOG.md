@@ -4,6 +4,23 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0] — 2026-03-12
+
+### Added
+- **TesterCritic wired into pipeline as Phase 3** (DEC-020). The Tester verifies other critics' findings after Phase 1 (single-file critics) and Phase 2 (cross-consistency), before the Aggregator produces the verdict.
+  - **L1 contradictions auto-excluded**: If a critic cites a file/line that doesn't exist or content that doesn't match, the finding is silently removed from verdict calculation. Preserved in tester output for audit.
+  - **L2 contradictions annotated**: If the Tester's LLM judges a claim unsupported by evidence, the finding gets a `[L2-CONTRADICTED]` annotation but remains in the verdict. Human decides.
+  - **Depth-based activation**: Quick = skip, Standard = L1 only (zero API cost), Thorough = L1 + L2.
+- **Tester stats in run manifest**: `verified`, `unverified`, `contradicted`, `verification_rate`, `runtime_ms`.
+- **Verification section in report.md** when tester results are present: table of verified/unverified/contradicted counts with per-finding exclusion details.
+- 12 new integration tests (`test_tester_pipeline_integration.py`). Total: 879 passed, 6 skipped.
+
+### Changed
+- `AggregatorAgent.run()` accepts optional `tester_result` parameter. Applies DEC-020 policy before deduplication.
+- `AggregatedReport` model gains `tester_result` and `l1_excluded_count` fields.
+- Verdict reasoning now includes excluded finding count when tester ran.
+- Removed unnecessary `asyncio.CancelledError` isinstance guards (CancelledError is BaseException in Python 3.9+, never caught by `except Exception`).
+
 ## [0.6.1] — 2026-03-11
 
 ### Changed
