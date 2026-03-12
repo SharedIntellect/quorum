@@ -304,14 +304,16 @@ class TestAssignVerdict:
         verdict = aggregator._assign_verdict(report)
         assert verdict.status == VerdictStatus.PASS_WITH_NOTES
 
-    def test_info_finding_pass_with_notes(self, aggregator):
+    def test_info_only_findings_produce_pass(self, aggregator):
+        """INFO-only findings produce PASS per documented contract (not PASS_WITH_NOTES)."""
         report = AggregatedReport(
             findings=[make_finding(severity=Severity.INFO)],
             confidence=0.9,
             critic_results=[],
         )
         verdict = aggregator._assign_verdict(report)
-        assert verdict.status == VerdictStatus.PASS_WITH_NOTES
+        assert verdict.status == VerdictStatus.PASS
+        assert "informational" in verdict.reasoning.lower()
 
     def test_critical_trumps_high(self, aggregator):
         report = AggregatedReport(
@@ -396,7 +398,7 @@ class TestAggregatorRun:
         test_cases = [
             ([], VerdictStatus.PASS),  # empty → PASS
             ([make_critic_result("c", [make_finding(severity=Severity.INFO)])],
-             VerdictStatus.PASS_WITH_NOTES),
+             VerdictStatus.PASS),  # INFO-only → PASS per documented contract
             ([make_critic_result("c", [make_finding(severity=Severity.HIGH)])],
              VerdictStatus.REVISE),
             ([make_critic_result("c", [make_finding(severity=Severity.CRITICAL)])],

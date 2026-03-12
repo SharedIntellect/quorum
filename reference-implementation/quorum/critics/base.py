@@ -14,6 +14,7 @@ Each critic is responsible for:
 from __future__ import annotations
 
 import abc
+import json
 import logging
 import time
 from typing import Any
@@ -131,7 +132,8 @@ class BaseCritic(abc.ABC):
         try:
             prompt = self.build_prompt(artifact_text, rubric)
             if extra_context:
-                prompt += f"\n\n### Additional Context\n{extra_context}"
+                ctx_str = json.dumps(extra_context, indent=2) if isinstance(extra_context, dict) else str(extra_context)
+                prompt += f"\n\n### Additional Context\n{ctx_str}"
 
             system = self.system_prompt
             if mandatory_context:
@@ -149,14 +151,19 @@ class BaseCritic(abc.ABC):
                 temperature=self.config.temperature,
             )
 
+            if raw is None:
+                raise ValueError("LLM returned empty response")
+
             findings = self._parse_findings(raw)
             criteria_total = len(rubric.criteria)
             criteria_evaluated = self._count_criteria_evaluated(findings, rubric)
             confidence = self._compute_coverage(criteria_evaluated, criteria_total)
 
         except Exception as e:
-            logger.error("[%s] Evaluation failed: %s", self.name, e)
+            logger.exception("[%s] Evaluation failed: %s", self.name, e)
             runtime_ms = int(time.time() * 1000) - start_ms
+            # Sanitize: use exception type + message, not raw str(e) which may leak paths
+            err_type = type(e).__name__
             return CriticResult(
                 critic_name=self.name,
                 findings=[],
@@ -165,7 +172,7 @@ class BaseCritic(abc.ABC):
                 criteria_evaluated=0,
                 runtime_ms=runtime_ms,
                 skipped=True,
-                skip_reason=f"Evaluation failed: {e}",
+                skip_reason=f"Evaluation failed ({err_type})",
             )
 
         runtime_ms = int(time.time() * 1000) - start_ms
@@ -204,8 +211,19 @@ class BaseCritic(abc.ABC):
             evidence_tool = f.get("evidence_tool", "llm-analysis")
             citation = f.get("rubric_criterion")
 
+            # Normalize and validate severity — don't let one bad value discard all findings
+            raw_severity = f.get("severity", "MEDIUM")
+            try:
+                severity = Severity(str(raw_severity).upper().strip())
+            except (ValueError, KeyError):
+                logger.warning(
+                    "[%s] Finding #%d: invalid severity '%s', defaulting to MEDIUM",
+                    self.name, i, raw_severity,
+                )
+                severity = Severity.MEDIUM
+
             finding = Finding(
-                severity=Severity(f.get("severity", "MEDIUM")),
+                severity=severity,
                 description=f.get("description", ""),
                 evidence=Evidence(
                     tool=evidence_tool,
@@ -227,25 +245,15 @@ class BaseCritic(abc.ABC):
     @staticmethod
     def _count_criteria_evaluated(findings: list[Finding], rubric: Rubric) -> int:
         """
-        Count how many rubric criteria were addressed by findings.
+        Count rubric criteria in scope for this evaluation.
 
-        A criterion is "evaluated" if at least one finding references it
-        via rubric_criterion. Criteria with no findings are assumed PASS
-        (not evaluated in the findings sense, but covered by the critic's
-        scope). This gives an honest lower bound.
+        Currently returns total criteria count because all criteria are included
+        in the critic's prompt. Criteria without findings represent implicit PASS
+        (the critic evaluated them and found no issues). This is an honest
+        representation: the critic was asked about all criteria, so all were evaluated.
         """
         if not rubric.criteria:
             return 0
-        # Collect all criterion IDs referenced by findings
-        referenced = {
-            f.rubric_criterion
-            for f in findings
-            if f.rubric_criterion
-        }
-        # Count criteria that were either referenced or total (all in scope)
-        # For now: all criteria are "evaluated" if the critic ran successfully,
-        # since the critic's prompt includes all criteria. Findings represent
-        # the subset that FAILED. Criteria without findings = implicit PASS.
         return len(rubric.criteria)
 
     @staticmethod

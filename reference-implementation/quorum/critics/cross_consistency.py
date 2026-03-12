@@ -225,6 +225,7 @@ class CrossConsistencyCritic:
         """
         start_ms = int(time.time() * 1000)
         all_findings: list[Finding] = []
+        evaluated_count = 0
 
         # Format Phase 1 findings as context (deduplification signal)
         phase1_context = self._format_phase1_context(phase1_findings or [])
@@ -248,6 +249,7 @@ class CrossConsistencyCritic:
                     critic=self.name,
                     loci=[],
                 ))
+                evaluated_count += 1
                 continue
 
             if not resolved.role_b_exists:
@@ -265,16 +267,19 @@ class CrossConsistencyCritic:
                     critic=self.name,
                     loci=[],
                 ))
+                evaluated_count += 1
                 continue
 
             # Build and run the LLM prompt for this relationship
             try:
                 findings = self._evaluate_relationship(resolved, phase1_context)
                 all_findings.extend(findings)
+                evaluated_count += 1
             except Exception as e:
                 logger.error(
                     "Failed to evaluate %s relationship (%s ↔ %s): %s",
                     rel.type, rel.role_a_path, rel.role_b_path, e,
+                    exc_info=True,
                 )
                 all_findings.append(Finding(
                     severity=Severity.HIGH,
@@ -282,13 +287,13 @@ class CrossConsistencyCritic:
                         f"Cross-consistency evaluation failed for {rel.type}: "
                         f"{rel.role_a_path} ↔ {rel.role_b_path}"
                     ),
-                    evidence=Evidence(tool="error", result=str(e)),
+                    evidence=Evidence(tool="error", result=f"{type(e).__name__}: {e}"),
                     critic=self.name,
                 ))
 
         runtime_ms = int(time.time() * 1000) - start_ms
         criteria_total = len(resolved_relationships)
-        criteria_evaluated = len(resolved_relationships)  # All relationships are evaluated
+        criteria_evaluated = evaluated_count
         confidence = self._compute_coverage(criteria_evaluated, criteria_total)
 
         logger.info(
@@ -320,10 +325,12 @@ class CrossConsistencyCritic:
             return []
 
         # Build template variables based on relationship type
+        # Escape scope to prevent str.format() injection from user YAML
+        escaped_scope = self._escape_braces(rel.scope) if rel.scope else ""
         template_vars: dict[str, str] = {
             "phase1_context": phase1_context,
-            "scope_note": f"Scope: {rel.scope}" if rel.scope else "",
-            "scope": rel.scope or "(full scope)",
+            "scope_note": f"Scope: {escaped_scope}" if escaped_scope else "",
+            "scope": escaped_scope or "(full scope)",
         }
 
         # Escape braces in file content to prevent str.format() injection —
@@ -376,6 +383,9 @@ class CrossConsistencyCritic:
             temperature=self.config.temperature,
         )
 
+        if raw is None:
+            raise ValueError("LLM returned empty response")
+
         return self._parse_findings(raw, resolved)
 
     def _parse_findings(
@@ -407,7 +417,8 @@ class CrossConsistencyCritic:
                     hash_a = Locus.compute_hash_from_content(
                         resolved.role_a_content, start_a, end_a,
                     )
-                except Exception:
+                except Exception as e:
+                    logger.debug("Hash computation failed for %s lines %d-%d: %s", rel.role_a_path, start_a, end_a, e)
                     hash_a = ""
                 loci.append(Locus(
                     file=rel.role_a_path,
@@ -422,7 +433,8 @@ class CrossConsistencyCritic:
                     hash_b = Locus.compute_hash_from_content(
                         resolved.role_b_content, start_b, end_b,
                     )
-                except Exception:
+                except Exception as e:
+                    logger.debug("Hash computation failed for %s lines %d-%d: %s", rel.role_b_path, start_b, end_b, e)
                     hash_b = ""
                 loci.append(Locus(
                     file=rel.role_b_path,
@@ -432,8 +444,16 @@ class CrossConsistencyCritic:
                     source_hash=hash_b,
                 ))
 
+            # Normalize severity — don't let one bad value discard all findings
+            raw_severity = f.get("severity", "MEDIUM")
+            try:
+                severity = Severity(str(raw_severity).upper().strip())
+            except (ValueError, KeyError):
+                logger.warning("[%s] Finding #%d: invalid severity '%s', defaulting to MEDIUM", self.name, i, raw_severity)
+                severity = Severity.MEDIUM
+
             finding = Finding(
-                severity=Severity(f.get("severity", "MEDIUM")),
+                severity=severity,
                 category=f.get("category", "coverage_gap"),
                 description=f.get("description", ""),
                 evidence=Evidence(
