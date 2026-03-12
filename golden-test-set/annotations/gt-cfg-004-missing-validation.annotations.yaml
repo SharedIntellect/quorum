@@ -1,0 +1,63 @@
+schema_version: "1.0"
+
+artifact: "artifacts/config/gt-cfg-004-missing-validation.json"
+artifact_sha256: "507c2e164a0b2df6ecf858c0129244d67f27f221895bb4b7e4109ab1d3cc1723"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-031
+    description: "No rate limiting configured anywhere in the gateway — neither global nor per-route"
+    location: "middleware array (lines 66-88); routes array (lines 15-77)"
+    severity: HIGH
+    category: completeness
+    critic: completeness
+    notes: >
+      The middleware array contains cors, compression, and request_id but no
+      rate limiting middleware. No route has a rate_limit block. Without rate
+      limiting, the gateway is vulnerable to denial-of-service via request
+      flooding and provides no protection against credential stuffing or
+      brute-force attacks on the auth endpoints. The upstream_defaults.retry
+      block handles upstream resilience but does not substitute for ingress
+      rate control.
+
+  - id: GT-032
+    description: "Missing input size validation — no max request body size or payload validation configured"
+    location: "gateway block (lines 3-13); routes array (lines 15-77)"
+    severity: HIGH
+    category: completeness
+    critic: completeness
+    notes: >
+      There is no max_body_size, max_request_size, or equivalent field at the
+      gateway or route level. Without a size cap, clients can send arbitrarily
+      large request bodies, enabling memory exhaustion attacks against upstream
+      services. The webhooks route (lines 68-77) is particularly exposed since
+      it has auth.required: false and relies entirely on application-layer HMAC
+      validation which happens after the body is already buffered.
+
+  - id: GT-033
+    description: "No authentication configured for the /admin route"
+    location: "routes[3] (lines 56-62)"
+    severity: HIGH
+    category: security
+    critic: security
+    notes: >
+      The route with id "route-admin" exposes /admin with methods GET, POST,
+      PUT, DELETE, PATCH but has no auth block. The comment "assumed safe
+      behind VPN" is not a configuration-level control — there is no
+      network policy, IP allowlist, or auth middleware enforcement in the
+      config itself. If the VPN assumption fails (misconfigured routing,
+      SSRF, compromised host), the admin panel is fully open. All privileged
+      routes must have explicit auth controls regardless of assumed network
+      perimeter.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: yaml-config
+  complexity: low
+  rubric: agent-config
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

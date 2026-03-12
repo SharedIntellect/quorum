@@ -1,0 +1,54 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-015-clean-subprocess.py"
+artifact_sha256: "df032d0172dae536bd93ac3e1b670cb1059140fb4cdba279b6317f56a1051580"
+
+expected_verdict: PASS
+
+findings: []
+
+false_positive_traps:
+  - description: >
+      All `subprocess.run()` and `subprocess.Popen()` calls in this module use
+      list-form arguments and never pass `shell=True`. These are the safe patterns
+      for subprocess usage and should NOT be flagged as command injection risks.
+    location: "line 90-107, line 148-157"
+    notes: >
+      Command injection via subprocess requires either `shell=True` (with a string
+      command) or user-controlled data injected into the command list without
+      validation. Neither condition is present here. All command lists are either
+      hardcoded constants (`["ps", "-o", ...]`) or validated before use. Flagging
+      subprocess calls on the basis of subprocess usage alone would be a false positive.
+
+  - description: >
+      `os.environ` is accessed in multiple places (lines 15-18, line 90). Reading
+      environment variables for runtime configuration is a standard, safe practice.
+      It should NOT be flagged as credential exposure or insecure secret handling.
+    location: "line 15-18"
+    notes: >
+      The environment variables read here are operational configuration:
+      `BUILD_WORKSPACE`, `MAX_OUTPUT_BYTES`, `BUILD_TIMEOUT_SEC`, and `LOG_LEVEL`.
+      None of these are credentials, tokens, or secrets. Reading env vars for
+      configuration is the recommended practice for twelve-factor applications.
+      A critic that flags all `os.environ` access as potential credential exposure
+      would produce a false positive here.
+
+  - description: >
+      The `run_streaming()` function spawns `threading.Thread` instances for
+      reading stdout and stderr concurrently. This is standard practice for
+      avoiding subprocess deadlocks when both stdout and stderr must be captured.
+      It should not be flagged as a threading hazard.
+    location: "line 148-181"
+    notes: >
+      The threads are joined with timeouts before the function returns. The
+      shared `lines_list` mutable lists are each written by exactly one thread
+      and only read by the main thread after `join()`, so there is no data race.
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: high
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

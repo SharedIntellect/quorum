@@ -1,0 +1,66 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-010-clean-research.md"
+artifact_sha256: "a88ab99aa6a5db10addff40a0d836eefb7ca848f5cd22b5fcd7a00b62849083d"
+
+expected_verdict: PASS
+
+findings: []
+
+false_positive_traps:
+  - description: >
+      Section 7 is titled "Future Work" and lists three research directions not
+      addressed in the current report: benchmarking in agentic systems, formal
+      verification approaches, and longitudinal defense durability. A critic
+      might interpret these as gaps in the current report — topics that were
+      researched but not covered. They are not gaps. "Future Work" is a standard
+      and expected section in a research synthesis that explicitly scopes what
+      the current report does and does not cover. The three items listed are
+      genuinely out of scope for this synthesis and are correctly deferred.
+    location: "section 7 (Future Work)"
+    notes: >
+      Future Work sections are proper research document structure. They signal
+      intellectual honesty about scope boundaries, not incompleteness in what
+      was claimed to be covered. If Quorum flags §7 as "the report is missing
+      coverage of agentic system benchmarks," that is a false positive — the
+      report explicitly does not claim to cover that. The synthesis covers what
+      it says it covers.
+
+  - description: >
+      The document notes in §6 (Limitations) that "The rate of publication in
+      this domain is high and our search has a cutoff of December 2025." A critic
+      might flag the December 2025 cutoff as a stale-data issue (the document
+      date is January 2026). This is not a defect. A literature search cutoff
+      that is 1-2 months before the document completion date is standard practice
+      — it allows time for synthesis and writing after search completion. The
+      cutoff is clearly disclosed. This is correct methodology.
+    location: "section 6 (Limitations), first bullet"
+    notes: >
+      A literature search cutoff slightly before the document date is normal and
+      expected. The cutoff is explicitly disclosed in the limitations section,
+      which is best practice. If Quorum flags this as "outdated search" that is
+      a false positive.
+
+  - description: >
+      The research report cites papers using "arXiv:NNNN.XXXXX" format for one
+      reference (Perez & Ribeiro 2022, arXiv:2211.09527) while citing others
+      by venue (USENIX Security, IEEE S&P, NeurIPS). A critic might flag
+      inconsistent citation format as a correctness or hygiene issue. Mixed
+      venue/arXiv citation format is acceptable and common in rapidly evolving
+      security research, where arXiv versions and conference versions coexist.
+      The Perez & Ribeiro citation's arXiv ID is real and verifiable.
+    location: "section 'References', Perez & Ribeiro (2022) entry"
+    notes: >
+      Mixed citation format (some by venue, one by arXiv ID) is not a defect.
+      It reflects the realistic publication landscape of LLM security research
+      where some work is best referenced by arXiv preprint and some by venue.
+      If Quorum flags citation format inconsistency as a finding, that is
+      over-classification.
+
+metadata:
+  source: natural
+  domain: markdown-doc
+  complexity: medium
+  rubric: research-synthesis
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

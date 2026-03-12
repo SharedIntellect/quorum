@@ -1,0 +1,52 @@
+schema_version: "1.0"
+
+artifact: "artifacts/config/gt-cfg-003-stale-references.yaml"
+artifact_sha256: "1eec85218e63b5d473ca93f6dd8c6a4b29398a12130f5a0947d6dea0ff25671f"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-029
+    description: "References deprecated API version v1beta1 in three distinct locations"
+    location: >
+      source.api_version (line 22),
+      monitoring.alerts.webhook (line 66),
+      feature_flags.endpoint (line 73)
+    severity: HIGH
+    category: correctness
+    critic: correctness
+    notes: >
+      The string "v1beta1" appears in three locations: (1) The Kafka consumer's
+      api_version field pinning the client to a deprecated Kafka broker API surface.
+      (2) The Alertmanager webhook URL using the deprecated /api/v1beta1/alerts
+      endpoint — the inline comment explicitly states this route was renamed to
+      "data-eng-oncall" and now 404s silently, meaning alerts are not firing.
+      (3) The feature flag endpoint URL using the deprecated v1beta1 API — the
+      comment states to use the v2 flag service instead. All three are active
+      correctness defects, not just documentation debt.
+
+  - id: GT-030
+    description: "References removed feature flag 'experimental_mode' from pipeline version that no longer supports it"
+    location: "transforms[2].experimental_mode (line 40)"
+    severity: HIGH
+    category: correctness
+    critic: correctness
+    notes: >
+      The filter transform sets experimental_mode: true. The inline comment
+      acknowledges this flag "was added in v0.9, removed in v1.2." The
+      justification offered ("rollback to v0.9 is theoretically possible") is
+      not an operational rationale — this field is silently ignored by any
+      version >= v1.2, meaning the ML-based bot detection this flag was intended
+      to enable is not actually running. The config is misleading about what
+      bot filtering is active in production.
+
+false_positive_traps: []
+
+metadata:
+  source: modified-natural
+  domain: yaml-config
+  complexity: medium
+  rubric: agent-config
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

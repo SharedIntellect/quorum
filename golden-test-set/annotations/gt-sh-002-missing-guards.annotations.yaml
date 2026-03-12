@@ -1,0 +1,59 @@
+schema_version: "1.0"
+artifact: "artifacts/shell/gt-sh-002-missing-guards.sh"
+artifact_sha256: "b4b5c028a224532e106f82406499c8adcfd2603702012360217d173d665436c1"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-056
+    description: "Missing 'set -euo pipefail' — script does not enable strict error mode, so failures in pg_dump, gzip, aws s3 sync, or find are silently ignored and execution continues"
+    location: "line 1"
+    severity: HIGH
+    category: completeness
+    critic: completeness
+    rubric_criterion: null
+    notes: >
+      Without 'set -e', a failed pg_dump (e.g., connection refused) will produce an empty/corrupt
+      gzip file that is then uploaded to S3 without any error signal. Without 'set -u', any
+      undefined variable is silently expanded to empty string. Without 'pipefail', pg_dump | gzip
+      failure masks the error code. The script has no explicit error checking on any command output.
+
+  - id: GT-057
+    description: "rm -rf executed on $OLD_DIR without checking if the variable is non-empty — an empty or whitespace value expands to 'rm -rf', destroying the filesystem root"
+    location: "line 46"
+    severity: HIGH
+    category: security
+    critic: security
+    rubric_criterion: null
+    notes: >
+      OLD_DIR is assigned via 'find ... | head -1', which produces empty output when no directories
+      match. The subsequent 'rm -rf $OLD_DIR' (unquoted) then reduces to 'rm -rf', which with
+      sufficient privileges will begin recursive deletion from the current working directory or
+      interpreted as argument-free invocation depending on shell. Must guard: [[ -n "$OLD_DIR" ]]
+      and verify path is under /mnt/backups before deleting. Variable is also unquoted, enabling
+      word-splitting on paths with spaces.
+
+  - id: GT-058
+    description: "No lock file or mutex to prevent concurrent runs — if cron triggers a second instance while the first is running, two simultaneous pg_dump + s3 sync operations corrupt the backup directory"
+    location: "line 1"
+    severity: MEDIUM
+    category: completeness
+    critic: completeness
+    rubric_criterion: null
+    notes: >
+      A nightly backup script is the canonical case for needing a lock file. If the backup job
+      takes longer than 24 hours (large DB, slow network), cron will start a second instance.
+      Both will write to the same BACKUP_DIR (same date key), the same DUMP_FILE name collision
+      is possible, and S3 sync will interleave partial uploads. Standard mitigation: flock or
+      a PID lock file at script start, removed on EXIT trap.
+
+false_positive_traps: []
+
+metadata:
+  source: modified-natural
+  domain: shell-script
+  complexity: medium
+  rubric: shell-script
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

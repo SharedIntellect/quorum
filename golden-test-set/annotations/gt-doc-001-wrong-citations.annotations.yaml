@@ -1,0 +1,60 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-001-wrong-citations.md"
+artifact_sha256: "7d9bc7fa272008c8429e638f0efec91f2257b401b4a6d51625c39b8aa5c3f3be"
+
+expected_verdict: REJECT
+
+findings:
+  - id: GT-037
+    description: >
+      Citation [3] (Gao et al., 2023) is attributed the wrong finding. The document
+      claims [3] discovered that HyDE was introduced by Gao et al. directly, then
+      contradicts itself by stating the actual HyDE concept originated with "Chen &
+      Zhao (2022)" — a paper not in the citation list. The document makes the explicit
+      correction mid-prose ("the correct attribution is Gao et al. [3]") but the
+      embedded acknowledgment that Chen & Zhao introduced the concept is left
+      unresolved. This creates an authorship attribution error: the core HyDE concept
+      is credited to Gao et al. [3] in the Key Findings heading but the body text
+      acknowledges it belongs to a different, uncited paper.
+    location: "section 'Key Findings', subsection 3.1"
+    severity: CRITICAL
+    category: correctness
+    critic: correctness
+    rubric_criterion: null
+    notes: >
+      The document plants a self-correcting statement that confuses rather than
+      resolves the attribution. The final attributed claim in the section header
+      (Gao et al. [3] → HyDE) is wrong; HyDE was introduced by different authors
+      and Gao et al. applied it. This is the intentional ground truth finding.
+
+  - id: GT-038
+    description: >
+      Citation [7] (Nakamura & Patel 2023) is listed in the bibliography as an
+      unpublished "Preprint, Stanford NLP Group, March 2023" but the document body
+      acknowledges this is incorrect: the correct citation is the published EMNLP
+      2023 proceedings version. The artifact retains the wrong citation in the
+      Appendix A citation map (listed as "Preprint") while the body text corrects
+      it. The annotation in the citation map therefore references a paper that does
+      not exist in the form listed — the Stanford preprint was not independently
+      published and is only retrievable as the EMNLP 2023 paper.
+    location: "section 'Methodology', Appendix A citation map, row [7]"
+    severity: CRITICAL
+    category: correctness
+    critic: correctness
+    rubric_criterion: null
+    notes: >
+      The citation in Appendix A is the canonical bibliography entry used by readers.
+      It points to a non-existent standalone preprint. The body correction in §3.2
+      is buried prose and easily missed. A researcher following the bibliography
+      citation will not find the source.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: markdown-doc
+  complexity: medium
+  rubric: research-synthesis
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

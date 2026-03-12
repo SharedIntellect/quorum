@@ -1,0 +1,51 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-012-ssrf-partial.py"
+artifact_sha256: "a40c04a6906af82336cb0ded34602a1c058c8617962d1625a7f51d1d55cbf63e"
+
+expected_verdict: PASS_WITH_NOTES
+
+findings:
+  - id: GT-023
+    description: >
+      SSRF via URL scheme bypass: the `validate_url()` function checks that the
+      scheme is in `_ALLOWED_SCHEMES` (`{"http", "https"}`), but this check is
+      applied to the scheme as parsed by `urllib.parse.urlparse`. Crafted URLs
+      such as those using `file://`, `gopher://`, or `dict://` schemes are not
+      explicitly rejected by name — they are only rejected if `urlparse` parses
+      the scheme correctly. Additionally, `allow_redirects=True` in `fetch_url()`
+      means that a valid-looking HTTP URL can redirect to a `file://` or internal
+      address without triggering re-validation. Separately, decimal/hex-encoded IP
+      addresses (e.g., `http://2130706433/` = `127.0.0.1`) may pass the string
+      blocklist check in `_BLOCKED_HOSTS` because the string representation does
+      not match any entry, even though the socket-layer resolution correctly
+      returns `127.0.0.1`. The resolve-and-check logic in `_resolve_hostname`
+      handles this second case, but only if DNS resolution succeeds; raw IP
+      literals passed as hostnames bypass the resolution path in some urllib
+      implementations.
+    location: "line 56-73"
+    severity: HIGH
+    category: security
+    critic: security
+    notes: >
+      The http/https scheme check is present and correct for the common case.
+      The finding is about the edge cases documented in the function's own
+      docstring: redirect chains, non-standard scheme parsing, and decimal IP
+      encoding. The verdict is PASS_WITH_NOTES (not REJECT) because the primary
+      attack surface (direct file:// or gopher:// URLs) is blocked by
+      `_ALLOWED_SCHEMES`, and the remaining gaps require more exotic attack vectors.
+      A thorough fix would: (1) disable `allow_redirects` or re-validate each
+      redirect destination; (2) normalize the URL before scheme extraction;
+      (3) resolve the host to an IP and compare numerically using `ipaddress`
+      before the string blocklist check.
+
+false_positive_traps: []
+
+metadata:
+  source: modified-natural
+  domain: python-code
+  complexity: medium
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

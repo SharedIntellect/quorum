@@ -1,0 +1,5 @@
+relationships:
+  - source: config.yaml
+    target: feature_flags.py
+    type: configuration
+    description: "config.yaml declares all feature flags with types and defaults; feature_flags.py loads, validates, and exposes them — every flag referenced in code must exist in config"

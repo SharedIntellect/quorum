@@ -1,0 +1,56 @@
+# feature-flags.yaml — application feature flag definitions
+# All flags evaluated at startup. Changing a value requires a rolling restart.
+# Owner: product-eng@company.internal
+# Last updated: 2026-02-01
+
+feature_flags:
+
+  # ── UI / UX ─────────────────────────────────────────────────────────────────
+
+  enable_new_dashboard:
+    type: boolean
+    default: false
+    description: "Enable the redesigned analytics dashboard (project Helios)"
+    rollout_pct: 0        # 0 = disabled globally; set to 1-100 for percentage rollout
+    owner: product-eng
+
+  enable_inline_comments:
+    type: boolean
+    default: true
+    description: "Show inline review comments on document view"
+    rollout_pct: 100
+    owner: product-eng
+
+  # ── Performance ──────────────────────────────────────────────────────────────
+
+  enable_response_cache:
+    type: boolean
+    default: true
+    description: "Enable Redis-backed response cache for read endpoints"
+    rollout_pct: 100
+    owner: platform-eng
+
+  cache_ttl_seconds:
+    type: integer
+    default: 300
+    description: "TTL in seconds for cached API responses"
+    min: 30
+    max: 3600
+    owner: platform-eng
+
+  max_retries:
+    type: integer
+    default: 3
+    description: "Maximum number of retry attempts for outbound HTTP calls"
+    min: 0
+    max: 10
+    owner: platform-eng
+
+  # ── Experimental ─────────────────────────────────────────────────────────────
+
+  enable_ai_suggestions:
+    type: boolean
+    default: false
+    description: "Enable AI-powered writing suggestions (experimental, opt-in only)"
+    rollout_pct: 0
+    owner: ml-eng

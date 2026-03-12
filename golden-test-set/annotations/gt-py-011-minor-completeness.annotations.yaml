@@ -1,0 +1,52 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-011-minor-completeness.py"
+artifact_sha256: "c92d6dcf0d0eb3bcc4bc63f552c17b2d336425c25afb7269b40603215f8f4700"
+
+expected_verdict: PASS_WITH_NOTES
+
+findings:
+  - id: GT-021
+    description: >
+      `send_bulk()` is a public method with no docstring. All other public methods
+      on `NotificationClient` (`send`, `get_status`, `cancel`, `list_recent`,
+      `health_check`) have descriptive docstrings. `send_bulk()` is missing one
+      entirely. A caller cannot determine the return type, what errors are raised,
+      or what the `recipient_ids` list format should be without reading the
+      implementation.
+    location: "line 63-72"
+    severity: MEDIUM
+    category: completeness
+    critic: completeness
+    notes: >
+      Add a docstring consistent with the other methods. At minimum it should
+      document: the `recipient_ids` type and expected format, return type,
+      and any exceptions raised.
+
+  - id: GT-022
+    description: >
+      No input validation on `limit` and `offset` parameters in `list_recent()`.
+      The docstring explicitly notes that "negative or zero values are passed
+      through to the API." Negative `limit` or negative `offset` may cause the
+      API to return unexpected results or an error that the caller is not prepared
+      to handle. A simple guard (`if limit < 1: raise ValueError(...)`) would
+      prevent invalid values from being forwarded.
+    location: "line 90-95"
+    severity: LOW
+    category: completeness
+    critic: completeness
+    notes: >
+      Minor advisory. The method correctly delegates pagination to the API and
+      raises `HTTPError` if the API rejects the params. Adding a local validation
+      guard improves usability and shifts the error earlier with a clearer message.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: low
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

@@ -1,0 +1,35 @@
+schema_version: "1.0"
+artifact: "artifacts/shell/gt-sh-003-clean-deploy.sh"
+artifact_sha256: "f99ff3bffc3a8ce8253e8da83887135fcbdd862e5204e10c48c3a74bdadcfa1c"
+
+expected_verdict: PASS
+
+findings: []
+
+false_positive_traps:
+  - description: "rm -rf \"${old_dir}\" on line ~145 — looks like unguarded deletion"
+    location: "line 145"
+    notes: >
+      This rm -rf is preceded by three independent guards: (1) the path is only entered if
+      RELEASE_PARENT is a valid directory AND starts with DEPLOY_BASE/ (allowlist prefix check);
+      (2) old_dir is populated via mapfile from a find command bounded by maxdepth/mindepth and
+      constrained to RELEASE_PARENT; (3) a per-iteration guard confirms old_dir is non-empty
+      AND still prefixed by RELEASE_PARENT/ before deletion. The variable is also double-quoted.
+      This is the correct pattern for safe parameterised rm -rf. Not a finding.
+
+  - description: "No explicit check that $VERSION is not 'latest' before the semver regex"
+    location: "line 56"
+    notes: >
+      The semver regex '^[0-9]+\.[0-9]+\.[0-9]+...$' already rejects 'latest' because 'latest'
+      contains no digits in the required positions. The die() path fires immediately. The script
+      header also documents that 'latest is not accepted'. Defense-in-depth is adequate here;
+      a separate string comparison would be redundant, not required. Not a finding.
+
+metadata:
+  source: synthetic
+  domain: shell-script
+  complexity: medium
+  rubric: shell-script
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

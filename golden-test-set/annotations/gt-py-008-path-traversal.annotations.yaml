@@ -1,0 +1,67 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-008-path-traversal.py"
+artifact_sha256: "4be1b46aae1abca26aca198d1accc3ca3d3a04e4f1d8c1a852c8c89f0f7c6783"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-015
+    description: >
+      Path traversal via unsanitized user-controlled filename in
+      `serve_user_document()`. The `filename` URL parameter is joined directly to
+      the user's upload directory with `user_dir / filename` and passed to
+      `send_file()` without any normalization or containment check. An attacker can
+      request a URL like `/api/users/1/documents/../../../etc/passwd` to read
+      arbitrary files accessible to the web server process.
+    location: "line 84-92"
+    severity: HIGH
+    category: security
+    critic: security
+    notes: >
+      The fix is to resolve the final path and verify it is still within `user_dir`:
+        `resolved = (user_dir / filename).resolve()`
+        `if not str(resolved).startswith(str(user_dir.resolve())): abort(404)`
+      Alternatively, use `werkzeug.utils.secure_filename()` on the filename before
+      joining, as is already done correctly in the upload endpoint (`serve_user_document`
+      uses raw filename while `upload_user_document` uses `secure_filename` — the
+      inconsistency is itself noteworthy). Note that `secure_filename()` alone
+      is not sufficient if the user_dir path itself is untrusted.
+
+  - id: GT-016
+    description: >
+      Directory listing exposure in `list_user_documents()`. The endpoint returns
+      the names, sizes, and modification timestamps of all files in a user's upload
+      directory with no authentication or authorization check. Any caller — including
+      unauthenticated external requests — can enumerate a user's document names by
+      hitting `/api/users/<id>/documents` with any integer user_id. This leaks
+      existence and metadata of documents even when the requester has no right to
+      read them.
+    location: "line 98-113"
+    severity: MEDIUM
+    category: security
+    critic: security
+    notes: >
+      At minimum, this endpoint should verify that the requesting identity matches
+      `user_id` (or is an admin). The route docstring acknowledges there is "no
+      authentication or authorization check."
+
+false_positive_traps:
+  - description: >
+      `os.path.join(BASE_DIR, "static", "style.css")` in `serve_stylesheet()` uses
+      fully hardcoded path components with no user input. This is not a path traversal
+      risk.
+    location: "line 42"
+    notes: >
+      `BASE_DIR`, `"static"`, and `"style.css"` are all constants or literals. No
+      user-controlled value is involved. Flagging this would be a false positive
+      triggered by the presence of `os.path.join` alone.
+
+metadata:
+  source: modified-natural
+  domain: python-code
+  complexity: high
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

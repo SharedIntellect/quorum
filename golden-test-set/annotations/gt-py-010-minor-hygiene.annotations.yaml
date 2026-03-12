@@ -1,0 +1,52 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-010-minor-hygiene.py"
+artifact_sha256: "a83d2b1dc496107e45052cd790146f9c45f37fb3ff12a096398fd6d18172cb1a"
+
+expected_verdict: PASS_WITH_NOTES
+
+findings:
+  - id: GT-019
+    description: >
+      `cron_next_run()` function body exceeds 50 lines (approximately 55 lines
+      including docstring and blank lines). While the function is well-documented
+      and logically coherent, it is at the upper edge of the conventional
+      single-responsibility limit for Python functions. PEP 8 does not set a hard
+      limit, but the project rubric flags functions exceeding 50 lines as a hygiene
+      advisory.
+    location: "line 112-167"
+    severity: MEDIUM
+    category: code_hygiene
+    critic: code_hygiene
+    notes: >
+      This is a borderline advisory. The function could reasonably be split into a
+      pure "compute next run time" core and a separate "apply business hours
+      adjustment" wrapper. The overall module quality is high; this is the only
+      structural concern.
+
+  - id: GT-020
+    description: >
+      Magic number `86400` (seconds in a day) used inline in `humanize_timedelta()`
+      without a named constant. The value appears multiple times in the function
+      body without being defined as a named constant (e.g., `SECONDS_PER_DAY = 86400`).
+      While `86400` is a well-known value, the rubric flags inline numeric literals
+      that represent meaningful domain constants.
+    location: "line 183"
+    severity: LOW
+    category: code_hygiene
+    critic: code_hygiene
+    notes: >
+      `86400` could be extracted to a module-level constant `SECONDS_PER_DAY = 86400`
+      and reused in both `humanize_timedelta()` and the duration parser. Minor
+      advisory only — does not affect correctness.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: low
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"
