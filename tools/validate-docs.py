@@ -78,7 +78,7 @@ def find_md_files(repo_root: Path) -> list[Path]:
     """Find all .md files in the repo, excluding dirs that shouldn't be validated."""
     exclude_dirs = {
         "venv", "node_modules", ".git", "quorum-runs", "__pycache__", "dist",
-        ".hypothesis", "external-reviews",  # external reviews are point-in-time snapshots
+        ".hypothesis", "external-reviews", "reviews",  # external reviews are point-in-time snapshots
     }
     exclude_files = {
         "SHIPPING.md",      # contains historical context about the problem
