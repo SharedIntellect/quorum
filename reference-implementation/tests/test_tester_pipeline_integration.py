@@ -153,7 +153,7 @@ class TestPhase3DepthActivation:
 # ── DEC-020: Contradiction Policy ────────────────────────────────────────────
 
 
-class TestDEC020ContraictionPolicy:
+class TestDEC020ContradictionPolicy:
     """DEC-020: L1 CONTRADICTED → exclude, L2 CONTRADICTED → annotate."""
 
     @pytest.fixture
