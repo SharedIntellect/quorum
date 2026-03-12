@@ -545,11 +545,26 @@ def run_prescreen(target_path: Path) -> dict:
         print(f"Error: file not found: {target_path}", file=sys.stderr)
         sys.exit(1)
 
+    # ── Input validation (size check before read to prevent memory exhaustion) ─
+    file_size = target_path.stat().st_size
+    if file_size > MAX_ARTIFACT_SIZE:
+        print(
+            f"Error: artifact too large ({file_size} bytes), max {MAX_ARTIFACT_SIZE}",
+            file=sys.stderr,
+        )
+        return {
+            "target": str(target_path),
+            "total_checks": 0,
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "checks": [],
+        }
+
     artifact_text = target_path.read_text(encoding="utf-8", errors="replace")
     ext = target_path.suffix.lower()
     checks: list[dict] = []
 
-    # ── Input validation ──────────────────────────────────────────────────
     if len(artifact_text) > MAX_ARTIFACT_SIZE:
         print(
             f"Error: artifact too large ({len(artifact_text)} bytes), max {MAX_ARTIFACT_SIZE}",
