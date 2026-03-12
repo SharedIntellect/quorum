@@ -1,0 +1,119 @@
+{
+  "_comment": "API Gateway Configuration — internal-api-gw, environment: production",
+  "_version": "3.7.1",
+  "_last_updated": "2026-01-22",
+  "_owner": "backend-platform@corp.example.com",
+
+  "gateway": {
+    "name": "internal-api-gw",
+    "listen": ":8443",
+    "tls": {
+      "enabled": true,
+      "cert_file": "/etc/tls/server.crt",
+      "key_file": "/etc/tls/server.key",
+      "min_version": "TLS1.2"
+    },
+    "access_log": {
+      "enabled": true,
+      "format": "json",
+      "path": "/var/log/api-gw/access.log"
+    }
+  },
+
+  "routes": [
+    {
+      "id": "route-users-api",
+      "path": "/api/v2/users",
+      "methods": ["GET", "POST", "PUT", "DELETE"],
+      "upstream": "http://users-service.internal:3000",
+      "timeout_ms": 5000,
+      "auth": {
+        "required": true,
+        "type": "bearer_jwt",
+        "jwks_url": "https://auth.example.com/.well-known/jwks.json",
+        "audience": "internal-api"
+      }
+    },
+    {
+      "id": "route-payments-api",
+      "path": "/api/v2/payments",
+      "methods": ["GET", "POST"],
+      "upstream": "http://payments-service.internal:4000",
+      "timeout_ms": 10000,
+      "auth": {
+        "required": true,
+        "type": "bearer_jwt",
+        "jwks_url": "https://auth.example.com/.well-known/jwks.json",
+        "audience": "internal-api"
+      }
+    },
+    {
+      "id": "route-reports-api",
+      "path": "/api/v2/reports",
+      "methods": ["GET"],
+      "upstream": "http://reports-service.internal:5000",
+      "timeout_ms": 30000,
+      "auth": {
+        "required": true,
+        "type": "bearer_jwt",
+        "jwks_url": "https://auth.example.com/.well-known/jwks.json",
+        "audience": "internal-api"
+      }
+    },
+    {
+      "id": "route-admin",
+      "path": "/admin",
+      "methods": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+      "upstream": "http://admin-service.internal:9000",
+      "timeout_ms": 30000,
+      "description": "Admin control panel — internal use only, assumed safe behind VPN"
+    },
+    {
+      "id": "route-webhooks",
+      "path": "/webhooks",
+      "methods": ["POST"],
+      "upstream": "http://webhook-processor.internal:6000",
+      "timeout_ms": 5000,
+      "auth": {
+        "required": false,
+        "note": "Webhooks validated by HMAC signature in application layer"
+      }
+    }
+  ],
+
+  "middleware": [
+    {
+      "name": "cors",
+      "enabled": true,
+      "allowed_origins": ["https://app.example.com", "https://admin.example.com"],
+      "allowed_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "allow_credentials": true
+    },
+    {
+      "name": "compression",
+      "enabled": true,
+      "algorithm": "gzip",
+      "min_size_bytes": 1024
+    },
+    {
+      "name": "request_id",
+      "enabled": true,
+      "header": "X-Request-ID"
+    }
+  ],
+
+  "upstream_defaults": {
+    "connect_timeout_ms": 1000,
+    "read_timeout_ms": 5000,
+    "max_idle_conns_per_host": 50,
+    "retry": {
+      "attempts": 2,
+      "on_status": [502, 503, 504]
+    }
+  },
+
+  "health": {
+    "path": "/healthz",
+    "interval_seconds": 30
+  }
+}

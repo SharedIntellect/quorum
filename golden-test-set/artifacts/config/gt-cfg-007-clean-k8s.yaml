@@ -1,0 +1,216 @@
+# Kubernetes Deployment Manifest — notification-service
+# Cluster: prod-us-east-1
+# Namespace: notifications
+# Last updated: 2026-03-05
+# Reviewed by: security-review@corp.example.com (2026-03-04, ticket SEC-0892)
+# Change: Promote to 3.0.1 after full security review sign-off
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: notifications
+  labels:
+    app: notification-service
+    version: "3.0.1"
+    team: messaging
+  annotations:
+    deployment.kubernetes.io/revision: "12"
+    kubernetes.io/change-cause: "Promote 3.0.1 post security review SEC-0892"
+    security-review/ticket: "SEC-0892"
+    security-review/date: "2026-03-04"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: notification-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: notification-service
+        version: "3.0.1"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: notification-service-sa
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: notification-service
+          image: registry.example.com/notification-service:3.0.1
+          imagePullPolicy: Always
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            # readOnlyRootFilesystem intentionally set to false.
+            # The notification-service renders email templates to a temp directory
+            # at /tmp/rendered/ using Jinja2. Making the root FS read-only would
+            # require an additional emptyDir mount for /tmp, which adds operational
+            # complexity without meaningful security benefit given /tmp is already
+            # ephemeral and governed by the container's seccomp profile.
+            # Accepted risk documented in SEC-0892.
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9090
+              name: metrics
+
+          env:
+            - name: APP_ENV
+              value: production
+            - name: LOG_LEVEL
+              value: info
+            - name: PORT
+              value: "8080"
+            - name: METRICS_PORT
+              value: "9090"
+            - name: SMTP_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: notification-service-config
+                  key: smtp_host
+            - name: SMTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: notification-service-config
+                  key: smtp_port
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secrets
+                  key: smtp_user
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secrets
+                  key: smtp_password
+            - name: SENDGRID_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secrets
+                  key: sendgrid_api_key
+
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: templates
+              mountPath: /app/templates
+              readOnly: true
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 2
+
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+
+      volumes:
+        - name: config
+          configMap:
+            name: notification-service-config
+        - name: templates
+          configMap:
+            name: notification-service-templates
+
+      imagePullSecrets:
+        - name: registry-credentials
+
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - notification-service
+              topologyKey: kubernetes.io/hostname
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: notification-service
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: notifications
+  labels:
+    app: notification-service
+spec:
+  selector:
+    app: notification-service
+  ports:
+    - port: 80
+      targetPort: 8080
+      name: http
+    - port: 9090
+      targetPort: 9090
+      name: metrics
+  type: ClusterIP
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: notification-service-pdb
+  namespace: notifications
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: notification-service

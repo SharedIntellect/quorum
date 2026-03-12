@@ -1,0 +1,5 @@
+relationships:
+  - source: spec.md
+    target: implementation.py
+    type: specification
+    description: "spec.md defines the User Management API contract (endpoints, auth, rate limits); implementation.py implements those endpoints in Flask"

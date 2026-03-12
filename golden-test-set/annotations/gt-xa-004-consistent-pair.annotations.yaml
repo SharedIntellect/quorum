@@ -1,0 +1,45 @@
+schema_version: "1.0"
+artifact: "artifacts/cross-artifact/gt-xa-004-consistent-pair/"
+artifact_sha256: "0708462a3da3720a01cfe3d85c1835b186af7123d0b8bc923b892908dda878a0"
+# Note: sha256 is of the primary document (spec.md). module.py sha256: 5aef66dad925301419325beef023ea13c7177293b3affa36ca8ee1d7279852f4
+
+expected_verdict: PASS
+
+findings: []
+
+false_positive_traps:
+  - description: "module.py adds an optional 'clock' parameter not listed in the spec's interface table"
+    location: "spec.md §Interface / module.py __init__ line 38"
+    notes: >
+      The spec's Advisory Notes section explicitly states: 'The implementation should support
+      subclassing for testing purposes (e.g., injecting a mock clock). This is a design
+      recommendation, not a hard requirement.' The clock parameter directly fulfils this
+      advisory. Adding a parameter that satisfies an advisory recommendation is not a
+      cross-consistency violation — it is compliant extension. The constructor signature is
+      backward-compatible (clock has a default). Not a finding.
+
+  - description: "Spec says consume() 'should' log a WARNING on rejection; module.py logs the warning outside the lock after returning False"
+    location: "spec.md §Advisory Notes / module.py lines 72-77"
+    notes: >
+      The WARNING log in module.py fires after the lock is released (the return False is inside
+      the with block, but the logger.warning call is outside it — the log fires when consume()
+      returns False). This is a minor structural quirk but not a bug: the spec's advisory says
+      'should log a WARNING when a consume() call is rejected', which is satisfied. The log
+      message includes available, capacity, and refill_rate context as recommended. The fact
+      that logging occurs outside the lock is irrelevant to the spec requirement. Not a finding.
+
+  - description: "module.py defines __repr__ which is not in the spec interface"
+    location: "module.py line 107"
+    notes: >
+      __repr__ is a Python convention for debug representation and is not part of the public
+      interface defined in spec.md. Adding __repr__ is additive and does not contradict any
+      spec requirement. Not a cross-consistency gap.
+
+metadata:
+  source: natural
+  domain: cross-artifact
+  complexity: high
+  rubric: cross-artifact
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

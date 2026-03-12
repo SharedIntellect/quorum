@@ -1,0 +1,63 @@
+schema_version: "1.0"
+
+artifact: "artifacts/config/gt-cfg-002-insecure-permissions.yaml"
+artifact_sha256: "3df39d2c24beb980ffdc8f39dfe22738ce43c4de36ab9e0a33d6b9ef39df3f80"
+
+expected_verdict: REJECT
+
+findings:
+  - id: GT-026
+    description: "Container running as root with privileged: true and allowPrivilegeEscalation: true"
+    location: "spec.template.spec.containers[0].securityContext (lines 38-43)"
+    severity: CRITICAL
+    category: security
+    critic: security
+    notes: >
+      The combination of privileged: true, runAsUser: 0, runAsGroup: 0, and
+      allowPrivilegeEscalation: true gives the container full root access to the
+      host kernel. A container escape in this configuration grants an attacker
+      unrestricted access to the underlying node and, by extension, the entire
+      cluster. Privileged mode should never be used in production workloads;
+      if specific capabilities are needed they should be granted individually via
+      securityContext.capabilities.add with the minimum required set.
+
+  - id: GT-027
+    description: "hostNetwork enabled without documented security justification or compensating controls"
+    location: "spec.template.spec.hostNetwork (line 29)"
+    severity: HIGH
+    category: security
+    critic: security
+    notes: >
+      hostNetwork: true causes all pods to share the node's network namespace,
+      bypassing Kubernetes network policies and exposing every port the pod
+      listens on directly on the host interface. The inline TODO comment
+      (INFRA-2089) acknowledges this is a known issue but no compensating
+      controls (e.g., firewall rules, network policy, or timeboxed exception
+      approval) are present. The justification ("legacy payment processor SDK
+      binds to fixed port 9742") does not meet the bar for a production
+      security exception without compensating controls documented and approved.
+
+  - id: GT-028
+    description: "No resource limits defined — missing resources.limits block"
+    location: "spec.template.spec.containers[0] (lines 36-37)"
+    severity: MEDIUM
+    category: completeness
+    critic: completeness
+    notes: >
+      The container has no resources.limits block. Without CPU and memory limits,
+      a runaway container can starve co-located workloads or OOM-kill the node.
+      The inline comment ("scaling handled by HPA") does not replace per-pod
+      limits — HPA governs replica count, not per-pod resource consumption.
+      Kubernetes best practice requires both requests and limits. Tracked in
+      INFRA-2090 but not yet resolved.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: yaml-config
+  complexity: medium
+  rubric: agent-config
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

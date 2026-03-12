@@ -1,0 +1,5 @@
+relationships:
+  - source: spec.md
+    target: module.py
+    type: specification
+    description: "spec.md defines the TokenBucket interface, constructor semantics, method contracts, and behaviour guarantees; module.py is the faithful implementation of that specification"

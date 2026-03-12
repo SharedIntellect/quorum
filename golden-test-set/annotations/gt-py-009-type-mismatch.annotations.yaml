@@ -1,0 +1,69 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-009-type-mismatch.py"
+artifact_sha256: "db5cc12fcd21a81ec537364604150a1a8cda23873a1d30726b5ab3f1ecf7bbed"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-017
+    description: >
+      String/int comparison in `is_high_priority()` always evaluates to `False` for
+      users not in `USER_SEGMENTS`. The `priority` field of a `NormalizedEvent` is
+      assigned directly from `segment.get("priority", 1)`. For users in the segment
+      store, `priority` is an `int`. For unknown users, the default dict returns
+      `"1"` (a string, as documented in `lookup_user_segment()`). The comparison
+      `event.priority >= HIGH_PRIORITY_THRESHOLD` then compares `str >= int`, which
+      raises a `TypeError` in Python 3 rather than silently returning False.
+      In practice, any event for an unknown user will raise an unhandled `TypeError`
+      in `route_event()`, causing that event to be lost.
+    location: "line 98-103"
+    severity: HIGH
+    category: correctness
+    critic: correctness
+    notes: >
+      The root cause is the heterogeneous type in `lookup_user_segment()`'s default
+      dict (line 73). The fix is to coerce `priority` to `int` at assignment time
+      in `transform()`: `priority = int(segment.get("priority", 1))`. The annotation
+      description says "always evaluates to False" which is the Python 2 behavior;
+      in Python 3 it raises TypeError. Either formulation is acceptable for the
+      critic to flag — the core finding is the type inconsistency.
+
+  - id: GT-018
+    description: >
+      `dict.get()` default type mismatch in `summarize()`. On the line
+      `extra = metadata.get("missing_key", {})`, the default is a dict `{}` but the
+      docstring states callers that do "sum(meta.values())" expect numeric values.
+      When the key is absent, callers receive an empty dict and will get a
+      `TypeError` when they try to sum it with integers. The variable name `extra`
+      and the comment confirm this is an intentional placeholder with an
+      incorrect default type.
+    location: "line 189-190"
+    severity: MEDIUM
+    category: correctness
+    critic: correctness
+    notes: >
+      The default should match the expected type of the value. If callers expect
+      an `int`, the default should be `0`. If callers expect a `dict`, downstream
+      arithmetic assumptions need to change. The inconsistency between the default
+      type and documented usage is the finding.
+
+false_positive_traps:
+  - description: >
+      `int("42")` on line 148 — valid literal conversion of a string constant to
+      an integer, representing a configuration value parsed from the environment.
+      This is not a type error or a bug.
+    location: "line 148"
+    notes: >
+      The conversion is well-defined and intentional. `"42"` is a string literal
+      (not user-controlled input), and `int("42")` always produces `42`. Flagging
+      this as a type coercion issue would be incorrect.
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: high
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

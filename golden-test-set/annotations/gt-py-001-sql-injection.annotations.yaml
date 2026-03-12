@@ -1,0 +1,37 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-001-sql-injection.py"
+artifact_sha256: "29e880b3866d2e3db9c076ad1bd1491ccfcf492608b2ee7b78e50f9a420d3611"
+
+expected_verdict: REJECT
+
+findings:
+  - id: GT-001
+    description: >
+      SQL injection via unsanitized user input in query builder. The `search_users`
+      route concatenates the `q` query parameter and the `field` parameter directly
+      into an SQL string using string concatenation. Although `field` is validated
+      against an allow-list, `query_term` is not parameterized. An attacker can
+      inject arbitrary SQL via the `q` parameter (e.g., `%' OR '1'='1`).
+    location: "line 37-39"
+    severity: CRITICAL
+    category: security
+    critic: security
+    notes: >
+      The `field` allow-list check on line 33-35 is a partial mitigation that
+      prevents column name injection, but does not protect against value injection
+      in the LIKE clause. The fix is to use a parameterized query:
+      `db.execute("... WHERE " + field + " LIKE ?", ("%"+query_term+"%",))`.
+      The other three routes (get_user, get_user_activity, create_user) correctly
+      use parameterized queries and are not findings.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: low
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

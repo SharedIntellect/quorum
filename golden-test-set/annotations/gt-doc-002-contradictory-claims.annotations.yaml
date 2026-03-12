@@ -1,0 +1,68 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-002-contradictory-claims.md"
+artifact_sha256: "436820cc770dc18a0c2f9557bba54618667a1976346a8d555e286a54d1c993e6"
+
+expected_verdict: REJECT
+
+findings:
+  - id: GT-039
+    description: >
+      Section 3 (Performance Requirements) defines the gateway's p99 processing
+      overhead budget as 100ms ("must not exceed 100ms at p99"). Section 5 (Rate
+      Limiting, §5.4) redefines the same budget as 250ms: "Rate-limit enforcement
+      must not increase p99 gateway latency by more than 150ms above baseline under
+      normal load conditions. The total gateway processing budget, including rate
+      limiting, is therefore 250ms at p99." These two values (100ms and 250ms) are
+      presented as hard requirements for the same system under the same conditions
+      and are directly contradictory. A system cannot simultaneously conform to
+      both specifications.
+    location: "section 3.1 (table p99 Hard Limit: 150ms, processing overhead: 100ms) and section 5.4"
+    severity: CRITICAL
+    category: correctness
+    critic: correctness
+    rubric_criterion: null
+    notes: >
+      The contradiction is clear and irreconcilable: §3.1 sets the gateway processing
+      overhead at ≤100ms p99, while §5.4 explicitly states the total budget including
+      rate limiting is 250ms. These numbers are for the same gateway, same conditions.
+      §5.4 even says "this budget supersedes the more conservative estimate in §3.1"
+      which makes the contradiction explicit in the document itself.
+
+  - id: GT-040
+    description: >
+      Section 4.2 (Service Topology) describes the gateway as routing traffic to
+      exactly 3 upstream services: Search Service, Indexing Service, and Auth Service.
+      The routing table in §4.2 lists exactly 3 path prefixes mapping to 3 services.
+      However, the Architecture Overview section (§4.1) states "Each node runs two
+      processes" and the surrounding text refers to "upstream services" in the plural
+      without specifying count — but the component topology description implies 3.
+      More critically, the Configuration Reference (§9) lists only 3 routing rules
+      in the example YAML (search, index, auth) while the surrounding prose in the
+      same document refers to "downstream service protection" in §1 generically.
+      The document's own Table of Contents references a fourth component role
+      (the "Response Cache" in the data flow diagram §4.3) as a service-level
+      interaction, creating an implicit fourth flow path not counted in the upstream
+      services table.
+    location: "section 4 (Architecture), data flow diagram in 4.3 vs service topology table in 4.2"
+    severity: HIGH
+    category: correctness
+    critic: correctness
+    rubric_criterion: null
+    notes: >
+      The data flow diagram shows 4 distinct components downstream of the router
+      (Search Service, Indexing Service, Auth Service, and Response Cache listed
+      as a separate branch), while the Service Topology table in §4.2 lists only
+      3 upstream services. The response cache is described as "in-process, per-node"
+      in §4.3 but appears as a separate downstream node in the data flow ASCII
+      diagram, making the diagram inconsistent with the text description.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: markdown-doc
+  complexity: high
+  rubric: markdown-doc
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

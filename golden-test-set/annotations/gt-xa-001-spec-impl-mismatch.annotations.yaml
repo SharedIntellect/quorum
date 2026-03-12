@@ -1,0 +1,49 @@
+schema_version: "1.0"
+artifact: "artifacts/cross-artifact/gt-xa-001-spec-impl-mismatch/"
+artifact_sha256: "6c108fb2524b0d376988a679369b0fea7a3744193a373f531f87078d8cdf043a"
+# Note: sha256 is of the primary document (spec.md). implementation.py sha256: 9e6d4fbe7e782ed6f0795957975f47732d7b3ec142eb12ffeb4ca5d15ea4a922
+
+expected_verdict: REJECT
+
+findings:
+  - id: GT-059
+    description: "Endpoint DELETE /api/users/{id} is defined in spec.md (section 5) but has no corresponding route in implementation.py — the endpoint is entirely absent"
+    location: "spec.md §5 / implementation.py (absent)"
+    severity: CRITICAL
+    category: cross_consistency
+    critic: cross_consistency
+    rubric_criterion: null
+    notes: >
+      The spec defines 5 endpoints (GET /api/users, GET /api/users/{id}, POST /api/users,
+      PUT /api/users/{id}, DELETE /api/users/{id}) plus GET /api/admin/stats.
+      implementation.py contains routes for all except DELETE /api/users/{id}.
+      This is a complete omission of a spec-required endpoint, not a partial mismatch.
+      The spec explicitly marks this endpoint as added in v2.1 with an audit requirement,
+      making the omission both a cross-consistency failure and a completeness gap.
+
+  - id: GT-060
+    description: "Spec mandates JWT Bearer auth on GET /api/admin/stats; implementation uses HTTP Basic authentication via require_basic_auth decorator — auth scheme mismatch"
+    location: "spec.md §6 (Authentication table + §GET /api/admin/stats) / implementation.py line 133"
+    severity: HIGH
+    category: cross_consistency
+    critic: cross_consistency
+    rubric_criterion: null
+    notes: >
+      The spec Authentication section explicitly states: 'Basic authentication is explicitly
+      prohibited on all endpoints.' Admin endpoints require JWT with role:admin claim validation.
+      The implementation defines a require_basic_auth() decorator that uses HTTP Basic auth
+      (base64-decoded username:password) and applies it to the /api/admin/stats route instead
+      of a JWT admin-scope validator. This is a direct contradiction of the spec's auth policy
+      and constitutes a security regression — Basic auth over the wire (without guaranteed TLS
+      enforcement at the route level) is substantially weaker than JWT with claim validation.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: cross-artifact
+  complexity: high
+  rubric: cross-artifact
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

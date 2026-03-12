@@ -1,0 +1,49 @@
+schema_version: "1.0"
+artifact: "artifacts/cross-artifact/gt-xa-003-readme-code-mismatch/"
+artifact_sha256: "dd59923f80cc7fa4f1910706b50d0d6e059013afa1c65a43c04d879e1e26134a"
+# Note: sha256 is of the primary document (README.md). cli.py sha256: 3a222d6c6ef36aef987fb0d839915a6a58d3886ca25e2153ae0dc3873bc87a54
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-063
+    description: "README documents a '--verbose' flag for all sub-commands; cli.py implements '--debug' — flag name mismatch means the documented flag does not exist and vice versa"
+    location: "README.md (Global flags table, line ~35; run example line ~73; serve example line ~92) / cli.py --debug option (lines 51, 79, 101)"
+    severity: HIGH
+    category: cross_consistency
+    critic: cross_consistency
+    rubric_criterion: null
+    notes: >
+      README.md's Global flags table lists '--verbose | flag | off | Enable verbose logging
+      (DEBUG level)'. The run, serve, and validate usage blocks all show '--verbose' in examples.
+      cli.py's Click options are named '--debug' (is_flag=True) across all three sub-commands.
+      There is no '--verbose' option anywhere in cli.py. A user following the README will
+      receive 'Error: No such option: --verbose'. The underlying behavior (enabling DEBUG logging)
+      is present in the code — only the flag name differs, making this a documentation/code
+      sync failure rather than a missing feature.
+
+  - id: GT-064
+    description: "README states the default port for 'datapipe serve' is 8080; cli.py defaults the --port option to 3000 — users following the README will connect to the wrong port"
+    location: "README.md line ~47 ('Start the HTTP listener on the default port (8080)') / cli.py line 79 (--port default=3000)"
+    severity: MEDIUM
+    category: cross_consistency
+    critic: cross_consistency
+    rubric_criterion: null
+    notes: >
+      README.md states 'Start the HTTP listener on the default port (8080)' and the
+      Troubleshooting section reinforces this: 'Another process is using port 8080.'
+      The config.yaml example also shows serve.port: 8080. However, the Click option in
+      cli.py defines default=3000. The authoritative value is the code; the README is wrong
+      by 1080 ports. Users running 'datapipe serve' and then connecting to localhost:8080
+      will get connection refused.
+
+false_positive_traps: []
+
+metadata:
+  source: modified-natural
+  domain: cross-artifact
+  complexity: medium
+  rubric: cross-artifact
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

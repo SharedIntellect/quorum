@@ -1,0 +1,76 @@
+# Feature Flag Service Configuration
+# Service: flagd
+# Environment: production
+# Owner: platform-eng@corp.example.com
+# Last modified: 2026-03-01
+
+service:
+  name: flagd
+  version: "1.4.0"
+  listen: ":8013"
+  metrics_port: 2112
+
+providers:
+  - type: file
+    path: /etc/flagd/flags.json
+    poll_interval_seconds: 30
+    watch: true
+
+  - type: grpc
+    host: flag-management.internal.example.com
+    port: 8014
+    tls: true
+    keepalive_time_seconds: 30
+    keepalive_timeout_seconds: 10
+    sync_interval_seconds: 60
+
+cache:
+  type: lru
+  size: 10000
+  ttl_seconds: 300
+
+auth:
+  enabled: true
+  type: mtls
+  ca_cert: /etc/tls/ca.crt
+  server_cert: /etc/tls/server.crt
+  server_key: /etc/tls/server.key
+
+cors:
+  enabled: false
+
+logging:
+  level: info
+  format: json
+  output: stdout
+
+health:
+  liveness_path: /healthz
+  readiness_path: /readyz
+  port: 8015
+
+telemetry:
+  enabled: true
+  exporter: otlp
+  endpoint: https://otel-collector.internal.example.com:4318
+  sample_rate: 1.0
+
+evaluation:
+  default_provider: grpc
+  fallback_provider: file
+  timeout_ms: 200
+  max_retries: 2
+
+defaults:
+  resolution_reason: STATIC
+  targeting_key: user_id
+  emit_events: true
+  event_buffer_size: 512
+  shutdown_grace_period_seconds: 15
+
+tls:
+  min_version: TLS1.3
+  cipher_suites:
+    - TLS_AES_128_GCM_SHA256
+    - TLS_AES_256_GCM_SHA384
+    - TLS_CHACHA20_POLY1305_SHA256

@@ -1,0 +1,37 @@
+schema_version: "1.0"
+
+artifact: "artifacts/config/gt-cfg-007-clean-k8s.yaml"
+artifact_sha256: "9c752572176b76f77e03f91e86aea87c355b51fdb8ca57d07a1bc0aae8491f02"
+
+expected_verdict: PASS_WITH_NOTES
+
+findings:
+  - id: GT-065
+    description: "No NetworkPolicy defined — production deployment allows unrestricted pod-to-pod communication"
+    location: "document-level"
+    severity: LOW
+    category: completeness
+    critic: completeness
+    notes: "A production K8s deployment should include a NetworkPolicy to restrict traffic. Not a security vulnerability per se, but a defense-in-depth gap."
+
+false_positive_traps:
+  - description: "securityContext.readOnlyRootFilesystem: false may appear to be a security misconfiguration"
+    location: "spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem (line 56)"
+    notes: >
+      readOnlyRootFilesystem is intentionally false and explicitly justified in
+      the config comments (lines 52-59): the notification-service renders Jinja2
+      email templates to /tmp/rendered/ and requires filesystem write access.
+      The accepted risk is documented and traceable to security review ticket
+      SEC-0892. All other securityContext fields are hardened (privileged: false,
+      allowPrivilegeEscalation: false, capabilities.drop: ALL, runAsNonRoot: true,
+      seccompProfile: RuntimeDefault). Flagging readOnlyRootFilesystem: false as
+      a defect without reading the surrounding justification is a false positive.
+
+metadata:
+  source: modified-natural
+  domain: yaml-config
+  complexity: medium
+  rubric: agent-config
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

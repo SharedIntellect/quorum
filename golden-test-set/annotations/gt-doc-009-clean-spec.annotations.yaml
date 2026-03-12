@@ -1,0 +1,49 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-009-clean-spec.md"
+artifact_sha256: "60037c4891f5b83adbb1354e2ea5e2900401e77ac5c18d39fc87decf10ae8cf8"
+
+expected_verdict: PASS
+
+findings: []
+
+false_positive_traps:
+  - description: >
+      Section 11 is titled "Known Limitations" and explicitly documents 5 design
+      boundaries of the v0.1.0 specification (no cross-cluster replication, no
+      exactly-once end-to-end, KRaft combined mode, schema evolution scope,
+      no DLQ automation). A critic might flag this as a completeness gap or as
+      the system being "incomplete." It is not. This is exemplary technical
+      documentation: explicitly scoping and documenting known limitations is
+      best practice for a v0.1.0 spec. The limitations are intentional design
+      boundaries, not omissions.
+    location: "section 11 (Known Limitations)"
+    notes: >
+      Known Limitations sections are a sign of documentation maturity, not a
+      defect. If Quorum flags §11 as a completeness issue ("the spec is missing
+      cross-cluster replication"), that is a false positive — the spec correctly
+      states this is out of scope. The limitations section is the evidence that
+      the author considered these cases and made a deliberate call.
+
+  - description: >
+      The spec version is "v0.1.0" throughout the document, including in the
+      title and revision history. A critic might flag this as indicating the
+      document is a pre-release draft not ready for use, or that versioned
+      references to "v0.1.0" suggest outdated content. This is not an issue.
+      v0.1.0 is explicitly the current accepted version of this spec (status
+      is "Draft — Accepted for implementation"). The version number reflects
+      where the system is in its development lifecycle, not a documentation flaw.
+    location: "document title, status field, §11 Known Limitations references, §13 Revision History"
+    notes: >
+      v0.1.0 is the legitimate current version. The revision history in §13
+      shows two entries for v0.1.0 (initial draft + review revision), which
+      is correct version tracking behavior. If Quorum flags the version as
+      "outdated" or "pre-release = incomplete," that is a false positive.
+
+metadata:
+  source: synthetic
+  domain: markdown-doc
+  complexity: high
+  rubric: markdown-doc
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

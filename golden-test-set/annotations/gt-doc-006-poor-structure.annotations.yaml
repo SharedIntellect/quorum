@@ -1,0 +1,67 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-006-poor-structure.md"
+artifact_sha256: "5bcca63f377dd756467fbe022d4ce4de0a07c729b415057f373c39bf6ce0530c"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-049
+    description: >
+      Installation instructions appear in 3 separate locations in this document,
+      each with overlapping or identical content: (1) the "Getting Started" section
+      provides a 5-step installation walkthrough; (2) the "Setting Up Your
+      Development Environment" section mid-document repeats the same steps in
+      prose form with the same commands; (3) the "Local Development Setup
+      (Quick Reference)" section at the end condenses the same steps again as a
+      one-liner. The three sections are not cross-referenced to each other, so a
+      reader following the document linearly encounters the same instructions
+      three times. If any step changes (e.g., requirements file name, Python
+      version), it must be updated in three places, creating a maintenance hazard.
+    location: "section 'Getting Started' (steps 1-5), section 'Setting Up Your Development Environment', and section 'Local Development Setup (Quick Reference)'"
+    severity: HIGH
+    category: code_hygiene
+    critic: code_hygiene
+    rubric_criterion: null
+    notes: >
+      This is a classic DRY violation in documentation. The three sections
+      contain the same git clone, venv creation, pip install, docker-compose up,
+      and make test commands. The "Quick Reference" section even explicitly says
+      "This is the same process as the full setup above, condensed for
+      convenience" — acknowledging the redundancy. One canonical installation
+      section with a quick-reference summary would be appropriate; three
+      separate full-length sections is not.
+
+  - id: GT-050
+    description: >
+      The document uses an inconsistent heading hierarchy throughout. The top-level
+      document heading is `#` (h1). The first section heading ("Getting Started")
+      is also `#` (h1), which is valid. However, the "Prerequisites" and
+      "Installation Steps" subsections use `###` (h3), skipping h2 entirely.
+      Later, "Architecture Overview" and "Configuration Reference" use `##` (h2),
+      while "Codebase Structure" and "Running Tests" use `#####` (h5), skipping
+      h3 and h4. The heading levels are applied inconsistently, creating an
+      incoherent document outline that breaks screen reader navigation and
+      document parsers expecting a proper hierarchy.
+    location: "document-wide; specific examples: 'Getting Started' (h1), 'Prerequisites' (h3), 'Codebase Structure' (h5), 'Running Tests' (h5), 'Architecture Overview' (h2)"
+    severity: MEDIUM
+    category: code_hygiene
+    critic: code_hygiene
+    rubric_criterion: null
+    notes: >
+      The heading hierarchy jumps from h1 → h3 (skipping h2) in the Getting
+      Started section, and from h1 → h5 for the Codebase Structure and Running
+      Tests subsections. The Configuration Reference uses h2 with h3 subsections
+      (correct), but this is inconsistent with how other sections are structured.
+      Standard Markdown guidance and accessibility guidelines require a logical
+      hierarchy without skipping levels.
+
+false_positive_traps: []
+
+metadata:
+  source: modified-natural
+  domain: markdown-doc
+  complexity: medium
+  rubric: markdown-doc
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

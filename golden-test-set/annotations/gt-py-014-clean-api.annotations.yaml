@@ -1,0 +1,41 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-014-clean-api.py"
+artifact_sha256: "2b51de412d496c823afc1377c658b4e2d71ab11186501f0e821e71f139ac3fe9"
+
+expected_verdict: PASS
+
+findings: []
+
+false_positive_traps:
+  - description: >
+      `requests.get(url, timeout=self._cfg.timeout)` in the `health()` method.
+      This call includes an explicit timeout via `self._cfg.timeout`, which is
+      a `(connect, read)` tuple defaulting to `(5.0, 30.0)`. It should NOT be
+      flagged for missing timeout — the timeout is present.
+    location: "line 155-158"
+    notes: >
+      A critic that checks for `requests.get()` calls without `timeout=` would
+      produce a false positive here. The timeout is passed through `self._cfg.timeout`,
+      which is initialized in `ClientConfig` with `DEFAULT_TIMEOUT = (5.0, 30.0)`.
+      The pattern is correct and robust.
+
+  - description: >
+      The `_request()` method contains recursive calls to itself (`self._request(...)`)
+      for retry handling. This is not infinite recursion — it is bounded by the
+      `_attempt` counter compared against `self._cfg.max_retries`. It should not
+      be flagged as unbounded recursion.
+    location: "line 222-231"
+    notes: >
+      The recursion terminates when `_attempt > self._cfg.max_retries` (default 3),
+      after which the non-2xx response is mapped to an exception. The depth is
+      bounded and small.
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: medium
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

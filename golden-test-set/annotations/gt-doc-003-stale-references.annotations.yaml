@@ -1,0 +1,61 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-003-stale-references.md"
+artifact_sha256: "9ab4a250d1810bc61f8f196354cbf21558c8f4da20661e068bedd082728c4e8f"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-041
+    description: >
+      The README specifies "Python 3.8 or higher" as the system requirement in the
+      Prerequisites section. Python 3.8 reached end-of-life in October 2024 and no
+      longer receives security patches. The document itself includes a footnote
+      acknowledging this ("Python 3.8 reached end-of-life in October 2024. While
+      Helix runs on Python 3.8, we recommend upgrading...") but the main requirement
+      still states 3.8, and the installation commands explicitly use `python3.8`.
+      As of 2026, the current supported Python versions are 3.11, 3.12, and 3.13.
+      Stating an EOL version as the primary requirement is an incorrect and
+      potentially dangerous specification.
+    location: "section 'Prerequisites', Software Requirements list, and Installation Option 1 commands"
+    severity: HIGH
+    category: correctness
+    critic: correctness
+    rubric_criterion: null
+    notes: >
+      The requirement is factually wrong for any deployment after October 2024.
+      The inline note acknowledges EOL but does not update the requirement —
+      this is a modified-natural pattern where a real README was not updated
+      when the Python version requirement changed. The install command
+      `python3.8 -m venv` is specifically broken.
+
+  - id: GT-042
+    description: >
+      The API Reference section documents management endpoints using the `/api/v1/`
+      path prefix (e.g., `POST /api/v1/pipeline/pause`, `GET /api/v1/dlq/messages`).
+      The same section contains a note stating: "The /api/v1/ prefix is deprecated
+      and will be removed in Helix 3.0. Please update any integrations to use
+      /api/v2/pipeline/, /api/v2/dlq/, etc." The document presents deprecated
+      endpoints as the primary documented interface while acknowledging they are
+      deprecated. A reader following this documentation for integration will
+      implement against an endpoint path scheduled for removal.
+    location: "section 'API Reference', Pipeline Control and DLQ Management subsections, and the note below them"
+    severity: HIGH
+    category: correctness
+    critic: correctness
+    rubric_criterion: null
+    notes: >
+      The documented API paths are deprecated. The note exists but is buried
+      after the endpoint definitions. The section header and code examples all
+      use /api/v1/, which is the path that will be removed. New integrators
+      reading this section will build against the wrong paths.
+
+false_positive_traps: []
+
+metadata:
+  source: modified-natural
+  domain: markdown-doc
+  complexity: medium
+  rubric: markdown-doc
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

@@ -1,0 +1,64 @@
+schema_version: "1.0"
+
+artifact: "artifacts/config/gt-cfg-005-contradictory.yaml"
+artifact_sha256: "94b39680368ed1fe16a1155d6ddab602e5aab149a127742b0f26379213e63093"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-034
+    description: "Total retry budget (retry_count * per_retry_timeout_seconds = 60s) exceeds max_timeout_seconds (45s)"
+    location: >
+      retry.retry_count (line 47),
+      retry.per_retry_timeout_seconds (line 48),
+      server.max_timeout_seconds (line 17)
+    severity: HIGH
+    category: correctness
+    critic: correctness
+    notes: >
+      retry_count is 5 and per_retry_timeout_seconds is 12, giving a theoretical
+      retry budget of 60 seconds. The global max_timeout_seconds is 45 seconds.
+      The config comment on line 50 explicitly acknowledges this discrepancy
+      ("NOTE: total retry budget = 5 * 12 = 60s, which EXCEEDS max_timeout_seconds
+      (45s)"). The practical effect is that the 4th or 5th retry attempt will
+      never execute — the circuit hits the global deadline and returns
+      deadline-exceeded to the caller. This silently degrades the retry policy
+      without any operational error, making the declared retry_count misleading.
+      The documented intent (OPS-3315) does not count as a fix. Either
+      max_timeout_seconds must be raised or retry_count * per_retry_timeout must
+      be reduced to fit within it.
+
+  - id: GT-035
+    description: "Log level set to DEBUG in production profile — will capture PII and credentials in logs"
+    location: "observability.log_level (line 69)"
+    severity: MEDIUM
+    category: code_hygiene
+    critic: code_hygiene
+    notes: >
+      service.profile is "production" (line 8) but observability.log_level is
+      "debug". The inline comment on line 68 confirms this was left from debugging
+      OPS-3298 and was not reverted before the deploy. DEBUG logging in this
+      service captures full request/response bodies, which include payment data
+      and authentication tokens. This is a code hygiene issue (forgotten debug
+      flag) with a secondary PII/security consequence. Should be "info" in
+      production.
+
+false_positive_traps:
+  - description: "max_connections: 0 may look like 'zero connections allowed' or a misconfiguration"
+    location: "server.max_connections (line 21)"
+    notes: >
+      max_connections: 0 is a well-established convention in Go HTTP servers
+      and many other frameworks meaning "unlimited" — there is no connection
+      cap. The inline comment in the config explicitly states: "0 = unlimited;
+      connection count governed by k8s resource limits." A critic flagging
+      this as a zero-connections bug or misconfiguration is a false positive.
+      Quorum should recognize the convention and the clarifying comment.
+
+metadata:
+  source: synthetic
+  domain: yaml-config
+  complexity: high
+  rubric: agent-config
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

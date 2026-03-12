@@ -1,0 +1,43 @@
+schema_version: "1.0"
+artifact: "artifacts/shell/gt-sh-001-command-injection.sh"
+artifact_sha256: "9e6f1d776afe4d2e19271546f2b278c80293d208072ef6dd308757126e31b513"
+
+expected_verdict: REJECT
+
+findings:
+  - id: GT-054
+    description: "eval used with unquoted variable expansion — DEPLOY_CMD value comes directly from a user-controlled config file without sanitization, enabling arbitrary command injection"
+    location: "line 26"
+    severity: CRITICAL
+    category: security
+    critic: security
+    rubric_criterion: null
+    notes: >
+      DEPLOY_CMD is read from a config file keyed by the first positional argument ($1 = DEPLOY_USER).
+      An attacker who controls the config file (or supplies a crafted environment name) can inject
+      arbitrary shell commands. The unquoted expansion compounds the risk — word-splitting and glob
+      expansion occur before eval runs. Pattern: eval $DEPLOY_CMD (no quotes, no validation).
+
+  - id: GT-055
+    description: "curl output piped directly to bash without TLS verification, checksum validation, or content-type inspection — remote code execution via install script"
+    location: "line 30"
+    severity: HIGH
+    category: security
+    critic: security
+    rubric_criterion: null
+    notes: >
+      The bootstrap URL is constructed from user-supplied $VERSION, then fetched with bare curl and
+      piped to bash. No --fail, no --cacert, no signature or checksum check. A MITM or compromised
+      registry can deliver arbitrary code. Even with a trusted server, missing --fail means a 4xx/5xx
+      response body is still executed. Pattern: curl $URL | bash.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: shell-script
+  complexity: low
+  rubric: shell-script
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

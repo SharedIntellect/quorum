@@ -1,0 +1,49 @@
+schema_version: "1.0"
+artifact: "artifacts/cross-artifact/gt-xa-002-config-code-mismatch/"
+artifact_sha256: "d794e22697eb26844cfa1c24e82dd103adc3c9bd7d4dcde84492cece4f752e5f"
+# Note: sha256 is of the primary document (config.yaml). feature_flags.py sha256: 8236e964064bb6ce14c68e2f6fe7f75b422511603aa157e311a3451142c2d705
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-061
+    description: "Code references feature flag 'enable_dark_mode' in _EXPECTED_FLAGS and as a typed property, but this flag is not defined in config.yaml — any deployment will warn on startup and silently default to False"
+    location: "config.yaml (absent) / feature_flags.py line 36 and line 107"
+    severity: HIGH
+    category: cross_consistency
+    critic: cross_consistency
+    rubric_criterion: null
+    notes: >
+      _EXPECTED_FLAGS in feature_flags.py includes 'enable_dark_mode': bool at line 36.
+      The typed property enable_dark_mode is defined at line 107. config.yaml defines 6 flags
+      (enable_new_dashboard, enable_inline_comments, enable_response_cache, cache_ttl_seconds,
+      max_retries, enable_ai_suggestions) — enable_dark_mode is not among them.
+      At runtime, the loader logs a warning and defaults to False (bool()), which masks the
+      inconsistency. The PLAT-4821 comment in the code confirms this is a known gap, not an
+      intentional design — the config update was not completed before the code shipped.
+
+  - id: GT-062
+    description: "Config defines max_retries as type integer; code explicitly casts it to str before storing, so flags.max_retries returns a string — type contract between config and code is broken"
+    location: "config.yaml (max_retries type: integer) / feature_flags.py lines 64-70 and line 99"
+    severity: HIGH
+    category: cross_consistency
+    critic: cross_consistency
+    rubric_criterion: null
+    notes: >
+      config.yaml declares max_retries with type: integer. The _EXPECTED_FLAGS dict maps it to
+      int (correct). However, the special-case branch at lines 64-70 deliberately converts the
+      value to str('raw_value') before storing, and the max_retries property at line 99 returns
+      str. Any caller that does integer arithmetic (e.g., 'for i in range(flags.max_retries)')
+      will get a TypeError at runtime. The comment 'legacy HTTP client expects string config' is
+      not reflected in the config schema and creates an undocumented, type-unsafe contract.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: cross-artifact
+  complexity: medium
+  rubric: cross-artifact
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

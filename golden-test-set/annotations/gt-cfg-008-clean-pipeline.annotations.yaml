@@ -1,0 +1,39 @@
+schema_version: "1.0"
+
+artifact: "artifacts/config/gt-cfg-008-clean-pipeline.json"
+artifact_sha256: "3048ea6bb05fc396ea7b30a2bc0bbff3541a8bac394e612757c369ecea3c2f64"
+
+expected_verdict: PASS
+
+findings: []
+
+false_positive_traps:
+  - description: "Field named 'secret_path' in the vault block may trigger secret-detection heuristics"
+    location: "vault.secret_path (line 22)"
+    notes: >
+      vault.secret_path contains the value "secret/data/ci/identity-service" —
+      this is a Vault KV v2 mount path, not an inline secret value. The field
+      name "secret_path" is standard Vault nomenclature. A heuristic that flags
+      any field containing the word "secret" in its key name, or any string
+      beginning with "secret/", as a credential leak would produce a false
+      positive here. The vault block is a proper Vault reference configuration
+      (address, auth_method, role, namespace, secret_path) with no inline
+      credential values anywhere in the file.
+  - description: "GITHUB_TOKEN and PYPI_API_TOKEN env var names in the release stage may look like exposed secrets"
+    location: "stages[4].env.GITHUB_TOKEN, stages[4].env.PYPI_API_TOKEN (lines 89-90)"
+    notes: >
+      Both variables have values structured as {"vault": "secret/data/..."} —
+      they are Vault injection references, not inline token values. A critic
+      that pattern-matches on env var names like GITHUB_TOKEN or PYPI_API_TOKEN
+      without examining the value structure would produce a false positive.
+      The correct detection requires checking whether the value is a string
+      literal vs. a Vault reference object.
+
+metadata:
+  source: synthetic
+  domain: yaml-config
+  complexity: medium
+  rubric: agent-config
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

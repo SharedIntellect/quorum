@@ -1,0 +1,58 @@
+schema_version: "1.0"
+
+artifact: "artifacts/python/gt-py-005-logic-errors.py"
+artifact_sha256: "9d2701b22d27a087b9bd76a543d4721ee29f2c8ce6f66c024f1db20da8a0e1c4"
+
+expected_verdict: REVISE
+
+findings:
+  - id: GT-007
+    description: >
+      Off-by-one error in discount tier boundary check. `compute_tier_discount()`
+      uses strict greater-than (`>`) to compare the subtotal against tier thresholds.
+      Per the business rule in the comment (spec §4.2), a subtotal of exactly
+      `$250.00` should qualify for the 15% tier, but the strict `>` causes it to
+      fall through to the 10% tier instead. The same off-by-one applies at the $100
+      and $50 boundaries.
+    location: "line 60"
+    severity: HIGH
+    category: correctness
+    critic: correctness
+    notes: >
+      The spec comment on lines 46-51 explicitly states the boundary includes the
+      threshold value ("$250+" and "$50–$99.99"). The fix is to change `>` to `>=`
+      on line 60:
+        `if subtotal >= threshold:`
+      This is a classic fence-post error that will silently under-discount customers
+      at exact tier boundaries.
+
+  - id: GT-008
+    description: >
+      Misleading operator precedence comment and incorrect rounding in tax
+      calculation. In `compute_tax()`, the expression
+      `taxable_amount * rate.quantize(Decimal("0.0001")) + Decimal("0")` rounds
+      the `rate` to 4 decimal places *before* multiplying, and the comment claims
+      this causes the final tax to be off by $0.01–$0.04. The rounding quantum
+      should be applied to the *product*, not to the rate alone. The correct
+      expression is `(taxable_amount * rate).quantize(Decimal("0.01"), ...)`.
+    location: "line 89-93"
+    severity: MEDIUM
+    category: correctness
+    critic: correctness
+    notes: >
+      The `+ Decimal("0")` on line 92 is a no-op that adds confusion without
+      fixing the rounding issue. The `.quantize()` call at line 95 does apply
+      correct final rounding, but operating on `rate` rather than the product
+      means intermediate precision loss accumulates. For large taxable amounts
+      the discrepancy can exceed $0.04.
+
+false_positive_traps: []
+
+metadata:
+  source: synthetic
+  domain: python-code
+  complexity: medium
+  rubric: python-code
+  depth: standard
+  author: akkari
+  created: "2026-03-12"

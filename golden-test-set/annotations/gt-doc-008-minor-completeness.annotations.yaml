@@ -1,0 +1,61 @@
+schema_version: "1.0"
+artifact: "artifacts/docs/gt-doc-008-minor-completeness.md"
+artifact_sha256: "fc38d5ebcada394b8e569cde94a1320353220b522b3dcc05a32f751997adecaa"
+
+expected_verdict: PASS_WITH_NOTES
+
+findings:
+  - id: GT-052
+    description: >
+      The "Ingest Documents" endpoint (§2, POST /api/v2/index/collections/{id}/documents)
+      documents only the 202 Accepted response body (the async job creation response).
+      It does not document the error responses for this endpoint. By contrast, the
+      "Create Collection" endpoint documents 3 specific error responses (400, 409, 422)
+      with structured error codes, and the "Delete Document" endpoint documents
+      a 404 error. The Ingest Documents endpoint has no error response examples
+      despite being the most likely endpoint to encounter errors (invalid document
+      format, oversized content, schema violations, collection not found). A
+      consumer cannot implement error handling without knowing the error response
+      schema.
+    location: "section 'Endpoints', subsection '2. Ingest Documents' — no error response table"
+    severity: MEDIUM
+    category: completeness
+    critic: completeness
+    rubric_criterion: null
+    notes: >
+      This is a real gap: the highest-traffic, most error-prone endpoint lacks
+      error documentation. The surrounding endpoints have it, making this an
+      inconsistency within the document as well as an omission. MEDIUM severity
+      because other endpoints model the pattern; a developer can infer likely
+      errors, but should not have to.
+
+  - id: GT-053
+    description: >
+      The specification has no changelog or version history section. The document
+      is versioned (v1.0) but contains no record of what changed from prior
+      versions, who made changes, or when. For an API specification that will
+      be updated over time, the absence of version history makes it impossible
+      for consumers to identify what changed between spec versions without
+      diffing documents manually.
+    location: "document-wide — absent section"
+    severity: LOW
+    category: completeness
+    critic: completeness
+    rubric_criterion: null
+    notes: >
+      LOW severity because this is a v1.0 document — there is no prior version
+      to diff against. The absence of a changelog is a gap for future maintainability
+      but does not impede current use. PASS_WITH_NOTES is appropriate: the document
+      is usable, but should establish a revision history section now for future
+      versions.
+
+false_positive_traps: []
+
+metadata:
+  source: modified-natural
+  domain: markdown-doc
+  complexity: low
+  rubric: markdown-doc
+  depth: standard
+  author: akkari
+  created: "2026-03-12"
