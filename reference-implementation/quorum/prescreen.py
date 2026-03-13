@@ -98,6 +98,26 @@ _RE_MARKDOWN_LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 _RE_TRAILING_SPACE = re.compile(r"[ \t]+$", re.MULTILINE)
 
 
+# ── Repo-root discovery ───────────────────────────────────────────────────────
+
+def _find_repo_root(start: Path) -> Path:
+    """Walk up from *start* to find the nearest directory containing .git.
+
+    Returns *start* (resolved) if no .git is found — this preserves the
+    old behaviour where files outside a repo are bounded to their own
+    directory.
+    """
+    current = start.resolve()
+    while True:
+        if (current / ".git").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            # Reached filesystem root without finding .git
+            return start.resolve()
+        current = parent
+
+
 # ── Helper ─────────────────────────────────────────────────────────────────────
 
 def _scan_lines(
@@ -442,6 +462,7 @@ class PreScreen:
     ) -> PreScreenCheck:
         """PS-007: Detect broken relative links in Markdown files."""
         base_dir = artifact_path.parent
+        repo_root = _find_repo_root(base_dir)
         broken: list[tuple[int, str, str]] = []  # (line_no, text, target)
 
         for i, line in enumerate(artifact_text.splitlines(), start=1):
@@ -458,11 +479,11 @@ class PreScreen:
                 if not path_part:
                     continue  # anchor-only link
                 resolved = (base_dir / path_part).resolve()
-                # V002 fix: skip links that escape artifact directory
+                # V002 fix: skip links that escape the repo root
                 try:
-                    resolved.relative_to(base_dir.resolve())
+                    resolved.relative_to(repo_root)
                 except ValueError:
-                    continue  # path traversal — don't follow
+                    continue  # path traversal — escapes repo boundary
                 if not resolved.exists():
                     broken.append((i, match.group(1), target))
 

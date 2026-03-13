@@ -338,6 +338,59 @@ def check_depth_config_claims(
     return findings
 
 
+# ── Framework version header staleness ────────────────────────────────────────
+
+# File basenames where version headers are expected and should be current
+_FRAMEWORK_DOC_SUFFIXES = ("_FRAMEWORK.md", "IMPLEMENTATION.md", "TESTER_CRITIC_BRIEF.md")
+
+_RE_VERSION_HEADER = re.compile(
+    r"""
+    (?:
+        \*{2}v(\d+\.\d+\.\d+)\s+(?:State|Status)          # **v0.5.1 State
+      | \#{1,4}\s+v(\d+\.\d+\.\d+)\s+(?:State|Status)     # ## v0.5.1 Status
+      | Status\s*\(v(\d+\.\d+\.\d+)\)                       # Status (v0.5.1)
+    )
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def check_framework_version_strings(
+    lines: list[str], manifest_version: str, file_path: Path
+) -> list[str]:
+    """Flag version strings in framework docs that don't match the manifest.
+
+    Only applies to files whose name ends with a known framework suffix.
+    Skips version strings inside fenced code blocks.
+    """
+    name = str(file_path)
+    if not any(name.endswith(s) for s in _FRAMEWORK_DOC_SUFFIXES):
+        return []
+
+    findings: list[str] = []
+    in_code_block = False
+
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
+
+        m = _RE_VERSION_HEADER.search(line)
+        if m:
+            found_version = next(g for g in m.groups() if g is not None)
+            if found_version != manifest_version:
+                findings.append(
+                    f"  {file_path}:{i}: Stale version header "
+                    f"'v{found_version}' (manifest={manifest_version}): "
+                    f"{line.strip()[:MAX_LINE_DISPLAY_CHARS]}"
+                )
+
+    return findings
+
+
 def validate_docs(repo_root: Path) -> list[str]:
     """Run all validation checks and return list of findings."""
     manifest = load_manifest(repo_root)
@@ -365,6 +418,7 @@ def validate_docs(repo_root: Path) -> list[str]:
         all_findings.extend(check_stale_status_markers(lines, shipped, rel_path))
         all_findings.extend(check_roadmap_shipped(lines, shipped, rel_path))
         all_findings.extend(check_depth_config_claims(lines, manifest, rel_path))
+        all_findings.extend(check_framework_version_strings(lines, manifest_version, rel_path))
 
     return all_findings
 
@@ -417,6 +471,7 @@ def main() -> int:
         all_findings.extend(check_stale_status_markers(lines, shipped, rel_path))
         all_findings.extend(check_roadmap_shipped(lines, shipped, rel_path))
         all_findings.extend(check_depth_config_claims(lines, manifest, rel_path))
+        all_findings.extend(check_framework_version_strings(lines, manifest_version, rel_path))
 
     if all_findings:
         print(f"FINDINGS ({len(all_findings)}):\n")
