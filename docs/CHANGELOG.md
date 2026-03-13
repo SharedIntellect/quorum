@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.7.2] — 2026-03-12
 
+### Documentation — Stale Content Cleanup (PR #18)
+
+- **External reviews removed**: 3 frontier model review files (GPT-5.4, Opus 4.6, Grok 4.20) and ideas-backlog.md deleted — reviews were run against v0.5.3 and no longer reflect current capabilities. `EXTERNAL_REVIEWS.md` replaced with community invitation template.
+- **13 stale content findings resolved** across SPEC.md, IMPLEMENTATION.md, CONFIG_REFERENCE.md, TUTORIAL.md, SKILL.md, RUBRIC_BUILDING_GUIDE.md, SECURITY_CRITIC_FRAMEWORK.md, CODE_HYGIENE_FRAMEWORK.md, TESTER_CRITIC_BRIEF.md, and INSTALLATION.md:
+  - Tester marked as shipped (was "SPECIFIED, not yet built")
+  - Critic counts updated to 6 shipped across all docs
+  - Learning memory marked as shipped (v0.5.3) across all docs
+  - Confidence scores replaced with coverage language (v0.6.1)
+  - Version headers updated to v0.7.2
+  - Depth profile critic counts aligned with critic-status.yaml
+  - Broken cross-reference paths fixed (TESTER_CRITIC_BRIEF, INSTALLATION)
+  - Security and Code Hygiene framework status checklists updated
+
 ### Documentation — Docs Restructure & README Rewrite (PR #16)
 
 - **README.md** rewritten: ~400 lines → ~120 lines. Focused on what Quorum is, how to run it, and where to go next. First-person voice preserved.
@@ -14,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `architecture/` — IMPLEMENTATION, THE_NINE
   - `critics/` — all critic-specific docs and frameworks
   - `guides/` — RUBRIC_BUILDING_GUIDE, CROSS_ARTIFACT_DESIGN
-  - `reviews/` — external review snapshots
+  - `reviews/` — community and practitioner evaluations
   - `configuration/` — CONFIG_REFERENCE
 - **New files:** `docs/getting-started/QUICK_START.md` (zero to running in <5 min), `docs/README.md` (navigation hub)
 - All cross-references updated across 30+ files

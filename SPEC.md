@@ -103,7 +103,7 @@ Three execution profiles balance rigor, speed, and cost:
 | Depth | Critics | Fix Loops | Runtime | Use Case |
 |-------|---------|-----------|---------|----------|
 | **quick** | Correctness, Completeness | 0 | 5-10 min | Fast feedback; low stakes |
-| **standard** | + Security, Code Hygiene | 0 | 15-30 min | Most work; default |
+| **standard** | + Security | 0 | 15-30 min | Most work; default |
 | **thorough** | All shipped critics | 1 (apply + re-verify) | 30-60 min | Critical decisions; production |
 
 Pre-screen (10 built-in checks + optional DevSkim SAST, §3.1) runs before LLM critics at all depth levels. Fix loops are implemented (Phase 1.5): the Fixer proposes text replacements for CRITICAL/HIGH findings, applies them, and re-runs critics to verify resolution. Full 9-critic panels are the roadmap target for thorough depth.
@@ -159,7 +159,7 @@ Supervisor (Orchestrator)
 ├─ Architecture Critic (Tier 2)     [SPECIFIED, not yet built]
 ├─ Delegation Critic (Tier 1)       [SPECIFIED, not yet built]
 ├─ Style Critic (Tier 2)            [SPECIFIED, not yet built]
-├─ Tester (Tier 2, tools: grep/web/exec) [SPECIFIED, not yet built]
+├─ Tester (Tier 2, tools: grep/web/exec) [IMPLEMENTED] — L1 deterministic + L2 LLM claim verification; see docs/critics/TESTER_CRITIC_BRIEF.md
 ├─ Fixer (Tier 1, optional)         [IMPLEMENTED — proposal mode + re-validation loops]
 ├─ Aggregator (Tier 1)              [IMPLEMENTED]
 └─ Supervisor (Tier 1, final)       [IMPLEMENTED]
@@ -386,7 +386,7 @@ This follows Tomasev's "trust as runtime primitive" principle.
 | Component | Cost | Amortization |
 |-----------|------|--------------|
 | Per-run setup (Supervisor intake) | $0.02 | 1 run |
-| 4 shipped critics (parallel, max 30min; 9 at full build-out) | $0.15-0.45 | 1 run |
+| 6 shipped critics (parallel, max 30min; 9 at full build-out) | $0.15-0.45 | 1 run |
 | Aggregator synthesis | $0.01 | 1 run |
 | Tester tools (grep, git, web, exec) | $0.00 | amortized |
 | Learning update (`known_issues.json`) | $0.00 | amortized |
@@ -398,7 +398,7 @@ Additional runs on related artifacts reuse critic prompts and tools, amortizing 
 
 ## 8. Implementation Checklist
 
-Status as of v0.5.0 (reference implementation):
+Status as of v0.7.2 (reference implementation):
 
 - [x] LLM provider — LiteLLM universal provider (100+ models, any tier combination)
 - [x] File-based artifact passing (no in-memory state between agents)
@@ -411,7 +411,7 @@ Status as of v0.5.0 (reference implementation):
 - [x] Depth preset system (quick/standard/thorough YAML configs)
 - [x] Path traversal security (boundary enforcement)
 - [x] Exit codes (0/1/2)
-- [x] Parallel critic dispatch (ThreadPoolExecutor, max 4 critics; batch files max 3)
+- [x] Parallel critic dispatch (ThreadPoolExecutor, max 6 critics; batch files max 3)
 - [x] Fixer agent — proposal mode + re-validation loops (Phase 1.5; proposes and applies text replacements for CRITICAL/HIGH, then re-runs critics to verify)
 - [x] Python code rubric (25 criteria, PC-001–PC-025, auto-detects on .py files)
 - [x] Learning memory system (known_issues.json frequency tracking + mandatory check promotion — shipped in v0.5.3)
@@ -444,7 +444,7 @@ Quorum is built on these peer-reviewed papers:
 - Rubric panel is **static** (doesn't specialize per artifact type dynamically)
 - **No critic-to-critic debate** (relies on Aggregator to resolve conflicts)
 - Learning is **frequency-based** only (no semantic deduplication of patterns yet)
-- **Confidence calibration** is not yet implemented
+- **Confidence calibration** replaced by criteria coverage counts in v0.6.1
 - **Trust/monitoring system** is not yet implemented
 
 ### Planned
@@ -470,7 +470,7 @@ Quorum is built on these peer-reviewed papers:
 ---
 
 **Quorum is a production-oriented, early-stage validation framework.**  
-*Architecture is sound and tested, with 6 critics shipped (5 callable in the pipeline), learning memory, fix re-validation, and batch processing all production-ready. Trust and monitoring systems are specified but not yet wired.*
+*Architecture is sound and tested, with 6 critics shipped (all callable), learning memory, fix re-validation, batch processing, and the Tester verification layer all production-ready. Trust and monitoring systems are specified but not yet wired.*
 
 
 ---

@@ -1,0 +1,8 @@
+reference-implementation/venv/
+reference-implementation/quorum.egg-info/
+golden-test-set/artifacts/
+golden-test-set/annotations/
+golden-test-set/scripts/
+.hypothesis/
+.pytest_cache/
+__pycache__/

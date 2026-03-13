@@ -165,4 +165,4 @@ Both tools run in parallel with Quorum's built-in pre-screen checks for optimal 
 
 ## Next Steps
 
-After installation, see the [main README](../README.md) for usage examples and the [rubrics guide](../rubrics/README.md) for information on evaluation criteria.
+After installation, see the [main README](../README.md) for usage examples and the [Rubric Building Guide](../../docs/guides/RUBRIC_BUILDING_GUIDE.md) for information on evaluation criteria.

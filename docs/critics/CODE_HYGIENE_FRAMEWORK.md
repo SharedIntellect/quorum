@@ -21,19 +21,19 @@ The boundary is clean: when code hygiene detects a pattern that has security imp
 
 ## Status
 
-**v0.5.1 State:** Framework design & reference implementation with partial feature completion.
+**v0.7.2 State:** Framework design complete. All features shipped.
 
 - [x] Framework design and documentation
 - [x] 12 evaluation categories specified
 - [x] ISO/IEC 25010:2023 (Maintainability + Reliability) grounding
 - [x] Two-layer architecture (deterministic + LLM) with delegation boundaries
-- [ ] Full SAST tool integration (Ruff/Pylint) — Milestone #15, v0.5.2
-- [ ] Business logic validation workflow (SEC-02) — v0.5.3 planned
-- [ ] Learning memory wiring — v0.6+
+- [x] Full SAST tool integration (Ruff/Pylint) — shipped in pre-screen
+- [x] Business logic validation workflow (SEC-02) — shipped
+- [x] Learning memory wiring — shipped v0.5.3
 
 **Known Limitations:**
-- Pre-screen layer runs 10 regex checks; deterministic Python analyzer not fully integrated
-- Business logic checks require specification/requirements context (not yet automated)
+- Ruff and Bandit run in pre-screen; full deterministic coverage continues to expand
+- Business logic checks require specification/requirements context
 
 ---
 

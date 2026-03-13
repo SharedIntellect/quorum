@@ -243,7 +243,7 @@ Structure your criteria as a Quorum rubric configuration.
 **Which critics?** Match critics to what the rubric is evaluating:
 - `correctness` — always include; verifies claims are accurate
 - `completeness` — always include; checks coverage
-- Additional critics (security, architecture, delegation) are on the roadmap — see SPEC.md for the full 9-agent design
+- Security and Code Hygiene critics are shipped. Architecture, Delegation, and Style are on the roadmap — see SPEC.md for the full 9-agent design.
 
 **Grading thresholds:**
 - `critical_tolerance: 0` means any CRITICAL failure → REJECT verdict. Appropriate for compliance rubrics.

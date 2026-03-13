@@ -1,12 +1,12 @@
 # Configuration Reference
 
-> **Implementation Status (v0.5.2):** This document describes both shipped and planned features. Items marked 🔜 are specified but not yet implemented.
+> **Implementation Status (v0.7.2):** This document describes both shipped and planned features. Items marked 🔜 are specified but not yet implemented.
 
 ## Depth Profiles
 
 | Profile | Critics | Fix Rounds | Time | Use Case | Status |
 |---------|---------|------------|------|----------|--------|
-| **quick** | Shipped critics (currently 4) | 0 | 5–15 min | Iteration, drafts | ✅ Shipped |
+| **quick** | Shipped critics (currently 2: correctness, completeness) | 0 | 5–15 min | Iteration, drafts | ✅ Shipped |
 | **standard** | Shipped critics + fixer | 1 on CRITICAL | 15–30 min | Pre-merge, reviews | ✅ Shipped |
 | **thorough** | All shipped critics + fixer | ≤2 on CRITICAL/HIGH | 30–60 min | Critical decisions, production | ✅ Shipped |
 | *standard (full)* | *6 (+ Architecture, Delegation, Style)* | *1 on CRITICAL* | *15–30 min* | *Pre-merge, reviews* | 🔜 Planned |
@@ -68,16 +68,14 @@ Rubrics are JSON files with the following structure:
 
 | Verdict | Meaning |
 |---------|---------|
-| **PASS** | No CRITICAL or HIGH issues; confidence ≥ 0.8 |
-| **PASS_WITH_NOTES** | No CRITICAL issues; ≤ 2 HIGH issues with mitigations; confidence ≥ 0.6 |
+| **PASS** | No CRITICAL or HIGH issues; coverage ≥ 80% of criteria evaluated |
+| **PASS_WITH_NOTES** | No CRITICAL issues; ≤ 2 HIGH issues with mitigations; coverage ≥ 60% of criteria evaluated |
 | **REVISE** | CRITICAL issues found but fixable; or > 2 HIGH issues |
 | **REJECT** | Fundamental architectural or security issues; requires redesign |
 
-## Known Issues / Learning Memory 🔜
+## Known Issues / Learning Memory
 
-> **Status:** Specified in architecture, not yet wired into production runs.
-
-The `known_issues.json` file will accumulate failure patterns across validation runs:
+> **Status:** Shipped in v0.5.3. The `known_issues.json` file accumulates failure patterns across validation runs:
 
 ```json
 {

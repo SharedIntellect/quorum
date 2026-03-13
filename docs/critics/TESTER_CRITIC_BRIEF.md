@@ -1,8 +1,8 @@
 # Tester Critic — Design Brief
 
-**Status:** Pre-spec. This document describes what to build, not how. A full SPEC section should be written from this brief before any code.
+**Status:** Shipped (v0.6.0). L1 deterministic + L2 LLM verification. Wired into pipeline as Phase 3 (v0.7.0). This document is the original design brief that guided implementation.
 
-**Why this matters:** Three independent external reviews (GPT-5.4, Grok 4.20 Heavy, Opus 4.6 Extended — 2026-03-09) converged on the same conclusion: the Tester critic is Quorum's single most important gap. Without it, evidence grounding is "an LLM judging another LLM's citations" — rhetorically deterministic, not actually deterministic.
+**Why this matters:** Three independent external reviews (2026-03-09) converged on the Tester as Quorum's most important gap. The Tester shipped in v0.6.0.
 
 **Design principle reminder:** Quorum is the gate, not the road.
 
@@ -30,19 +30,19 @@ It answers: "The Correctness critic says line 247 of cli.py has an unchecked ret
 - Open file, read the cited line(s)
 - Fuzzy match cited evidence against actual content
 - **Catches:** hallucinated line numbers, wrong file references, stale loci
-- **Ship in:** v0.6.0
+- **Shipped:** v0.6.0
 
 ### Level 2: Claim Verification (hybrid — deterministic + light LLM)
 - Read the code/text surrounding the locus
 - One focused LLM call: "Given this excerpt and this claim, is the claim accurate?"
 - **Catches:** mischaracterized code, overstated severity, correct line but wrong conclusion
-- **Ship in:** v0.6.0
+- **Shipped:** v0.6.0
 
 ### Level 3: Execution Verification (deterministic, sandboxed)
 - For executable claims (regex patterns, import checks, syntax validation): actually run them
 - For coverage claims: run coverage analysis
 - Requires sandboxing — significant security surface
-- **Ship in:** v0.7.0 (deferred, gated behind `--tester-execute`)
+- **Status:** Deferred, gated behind `--tester-execute`
 
 ## Output: Verification Tags
 
@@ -101,7 +101,6 @@ Before building the Tester itself:
 - ~3 focused sessions, not one marathon
 
 ## References
-- Opus 4.6 review: `docs/external-reviews/2026-03-09-opus-extended-review.md`
-- GPT-5.4 review: `docs/external-reviews/2026-03-09-gpt54-review.md`
+- Three independent external reviews (2026-03-09) converged on the Tester as Quorum's most important gap. The Tester shipped in v0.6.0.
 - Current critic architecture: `SPEC.md` §Critics, §Aggregator
 - Finding/Evidence/Locus models: `quorum/models.py`

@@ -11,20 +11,19 @@
 
 ## Status
 
-**v0.5.1 State:** Framework design & reference implementation with partial feature completion.
+**v0.7.2 State:** Framework design complete. All features shipped.
 
 - [x] Framework design and documentation
 - [x] 14 evaluation categories (SEC-01–SEC-14) specified
 - [x] OWASP ASVS 5.0, CWE Top 25, NIST SP 800-53 SA-11 grounding
 - [x] Detection capability matrix for SAST vs LLM judgment boundaries
-- [ ] Full SAST tool integration (Ruff/Bandit/PSScriptAnalyzer) — Milestone #15, v0.5.2
-- [ ] Threat model context feeding for SEC-04 (Authorization) — schema defined in `quorum-relationships.example.yaml` (`threat_context` type); runtime integration v0.5.3 planned
-- [ ] Learning memory wiring (issue tracking) — v0.6+
+- [x] Full SAST tool integration (Ruff/Bandit/PSScriptAnalyzer) — shipped in pre-screen
+- [x] Threat model context feeding for SEC-04 (Authorization) — `threat_context` type in relationship manifest, runtime integration shipped
+- [x] Learning memory wiring (issue tracking) — shipped v0.5.3
 
 **Known Limitations:**
-- Pre-screen layer runs 10 regex checks; 80+ referenced SAST rules not yet integrated
-- Authorization review (SEC-04) is speculative without threat model context — users can now define `threat_context` in the relationship manifest (roles, trust boundaries, sensitive operations); runtime feeding to the critic is planned for v0.5.3
-- PowerShell coverage ~70% vs 85%+ for Python (tooling ecosystem gap)
+- SAST rule coverage varies by language: Python ~85%+, PowerShell ~70% (tooling ecosystem gap)
+- Authorization review (SEC-04) benefits from threat model context — users can define `threat_context` in the relationship manifest (roles, trust boundaries, sensitive operations)
 
 ---
 

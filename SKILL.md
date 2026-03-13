@@ -33,8 +33,8 @@ python -m quorum.cli run --target <path-to-artifact> --rubric <rubric-name>
 ### Depth Profiles
 
 - `quick` — 2 critics (correctness, completeness) + pre-screen, ~5-10 min
-- `standard` — 6 critics (+ security, code_hygiene, cross_consistency†, tester) + pre-screen, ~15-30 min (default)
-- `thorough` — all 6 shipped critics + pre-screen + fix loops, ~30-60 min
+- `standard` — 4 active (correctness, completeness, security + tester) + pre-screen, ~15-30 min (default)
+- `thorough` — 5 active (+ code_hygiene) + pre-screen + fix loops, ~30-60 min
 
 *†Cross-Consistency requires `--relationships` flag with a relationships manifest.*
 

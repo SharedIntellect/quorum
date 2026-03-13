@@ -53,7 +53,7 @@ Everything you need to use, configure, and extend Quorum.
 
 | Doc | Description |
 |-----|-------------|
-| [External Reviews](reviews/EXTERNAL_REVIEWS.md) | Independent evaluations of Quorum by other models |
+| [External Reviews](reviews/EXTERNAL_REVIEWS.md) | Community and practitioner evaluations |
 | [Changelog](CHANGELOG.md) | Version history and release notes |
 | [Code of Conduct](CODE_OF_CONDUCT.md) | Community guidelines |
 
