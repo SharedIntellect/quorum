@@ -406,6 +406,63 @@ class TestPrescreenPS007BrokenLinks:
         assert check.result == "PASS"
 
 
+class TestPrescreenPS007RepoRootTraversal:
+    """Tests for the V002 fix: repo-root-bounded traversal guard."""
+
+    def test_upward_traversal_within_repo_allowed(self, ps, tmp_path):
+        """A link like ../../target.md that resolves inside the repo root should PASS."""
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "target.md").write_text("# Target\n")
+        subdir = tmp_path / "docs" / "guides"
+        subdir.mkdir(parents=True)
+        f = subdir / "tutorial.md"
+        f.write_text("[spec](../../target.md)\n")
+        result = ps.run(f, f.read_text())
+        check = next(c for c in result.checks if c.id == "PS-007")
+        assert check.result == "PASS", (
+            "Up-traversal to repo root should not be flagged as broken"
+        )
+
+    def test_upward_traversal_outside_repo_blocked(self, ps, tmp_path):
+        """A link that escapes past the .git boundary should be silently skipped."""
+        repo = tmp_path / "myrepo"
+        repo.mkdir()
+        (repo / ".git").mkdir()
+        (tmp_path / "outside.md").write_text("# Outside\n")
+        f = repo / "README.md"
+        f.write_text("[escape](../outside.md)\n")
+        result = ps.run(f, f.read_text())
+        check = next(c for c in result.checks if c.id == "PS-007")
+        assert check.result == "PASS", (
+            "Links escaping repo root should be silently skipped, not flagged broken"
+        )
+
+    def test_no_git_dir_falls_back_to_parent(self, ps, tmp_path):
+        """Without .git, falls back to artifact parent dir (old behaviour)."""
+        subdir = tmp_path / "sub"
+        subdir.mkdir()
+        f = subdir / "doc.md"
+        f.write_text("[up](../nonexistent.md)\n")
+        result = ps.run(f, f.read_text())
+        check = next(c for c in result.checks if c.id == "PS-007")
+        # Without .git, _find_repo_root returns the start dir (artifact parent).
+        # ../nonexistent.md resolves outside that boundary, so it's silently skipped.
+        assert check.result == "PASS"
+
+    def test_broken_link_within_repo_still_detected(self, ps, tmp_path):
+        """A broken link that stays within repo boundaries is still caught."""
+        (tmp_path / ".git").mkdir()
+        subdir = tmp_path / "docs"
+        subdir.mkdir()
+        f = subdir / "guide.md"
+        f.write_text("[missing](../NONEXISTENT.md)\n")
+        result = ps.run(f, f.read_text())
+        check = next(c for c in result.checks if c.id == "PS-007")
+        assert check.result == "FAIL", (
+            "Broken links within repo should still be detected"
+        )
+
+
 # ── PS-008: TODO Markers ─────────────────────────────────────────────────────
 
 

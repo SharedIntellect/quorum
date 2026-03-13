@@ -13,6 +13,7 @@ Checks (PS-001 through PS-010):
 
 Usage:
     python3 quorum-prescreen.py <target-file>
+    python3 quorum-prescreen.py --scan-links [DIR]
 """
 
 from __future__ import annotations
@@ -162,6 +163,23 @@ def _redact(line: str, max_len: int = MAX_EVIDENCE_DISPLAY_WIDTH) -> str:
 
     redacted = re.sub(r"\S{6,}", _mask, line)
     return redacted[:max_len]
+
+
+# ── Repo-root discovery ──────────────────────────────────────────────────────
+
+def _find_repo_root(start: Path) -> Path:
+    """Walk up from *start* to find the nearest directory containing .git.
+
+    Returns *start* (resolved) if no .git is found.
+    """
+    current = start.resolve()
+    while True:
+        if (current / ".git").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            return start.resolve()
+        current = parent
 
 
 # ── Check dict factory helpers ────────────────────────────────────────────────
@@ -412,6 +430,7 @@ def ps006_python_syntax(artifact_path: Path, artifact_text: str) -> dict:
 def ps007_broken_md_links(artifact_path: Path, artifact_text: str) -> dict:
     """PS-007: Detect broken relative links in Markdown files."""
     base_dir = artifact_path.parent
+    repo_root = _find_repo_root(base_dir)
     broken: list[tuple[int, str, str]] = []  # (line_no, text, target)
 
     for i, line in enumerate(artifact_text.splitlines(), start=1):
@@ -425,6 +444,11 @@ def ps007_broken_md_links(artifact_path: Path, artifact_text: str) -> dict:
             if not path_part:
                 continue  # anchor-only link
             resolved = (base_dir / path_part).resolve()
+            # Skip links that escape the repo root
+            try:
+                resolved.relative_to(repo_root)
+            except ValueError:
+                continue  # path traversal — escapes repo boundary
             if not resolved.exists():
                 broken.append((i, match.group(1), target))
 
@@ -446,6 +470,61 @@ def ps007_broken_md_links(artifact_path: Path, artifact_text: str) -> dict:
         f"{len(broken)} broken relative Markdown link(s)",
         evidence, locations,
     )
+
+
+# ── Batch link scanning ──────────────────────────────────────────────────────
+
+_SKIP_DIRS = {
+    ".git", "node_modules", "venv", "__pycache__", "dist", ".hypothesis",
+    "quorum-runs",      # historical run output — links are point-in-time snapshots
+    "golden-test-set",  # test artifacts with intentionally broken links
+    "external-reviews", "reviews",  # external review snapshots
+}
+
+
+def scan_all_links(repo_root: Path | None = None) -> dict:
+    """Walk all .md files under *repo_root* and run PS-007 on each.
+
+    Returns a consolidated JSON-serialisable dict with per-file results
+    and a summary.  If *repo_root* is None, auto-detect from cwd.
+    """
+    if repo_root is None:
+        repo_root = _find_repo_root(Path.cwd())
+
+    if not repo_root.is_dir():
+        return {"error": f"Not a directory: {repo_root}", "files": [], "total_broken": 0}
+
+    md_files: list[Path] = []
+    for md_file in sorted(repo_root.rglob("*.md")):
+        parts = md_file.relative_to(repo_root).parts
+        if any(p.startswith(".") or p in _SKIP_DIRS for p in parts):
+            continue
+        md_files.append(md_file)
+
+    results: list[dict] = []
+    total_broken = 0
+
+    for md_file in md_files:
+        try:
+            text = md_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        check = ps007_broken_md_links(md_file, text)
+        if check["status"] == "FAIL":
+            rel = str(md_file.relative_to(repo_root))
+            # Extract broken count from description
+            count_match = re.match(r"(\d+) broken", check.get("details", ""))
+            file_broken = int(count_match.group(1)) if count_match else 0
+            total_broken += file_broken
+            results.append({"file": rel, **check})
+
+    return {
+        "repo_root": str(repo_root),
+        "files_scanned": len(md_files),
+        "files_with_broken_links": len(results),
+        "total_broken": total_broken,
+        "results": results,
+    }
 
 
 # ── PS-008: TODO markers ─────────────────────────────────────────────────────
@@ -686,8 +765,24 @@ def run_prescreen(target_path: Path) -> dict:
 
 
 def main() -> None:
+    # ── --scan-links mode ────────────────────────────────────────────────
+    if len(sys.argv) >= 2 and sys.argv[1] == "--scan-links":
+        scan_dir = Path(sys.argv[2]).resolve() if len(sys.argv) >= 3 else None
+        result = scan_all_links(scan_dir)
+        if "error" in result:
+            print(f"Error: {result['error']}", file=sys.stderr)
+            sys.exit(1)
+        json.dump(result, sys.stdout, indent=2)
+        print()
+        sys.exit(0 if result["total_broken"] == 0 else 1)
+
+    # ── Single-file mode (existing behaviour) ────────────────────────────
     if len(sys.argv) != 2:
-        print("Usage: quorum-prescreen.py <target-file>", file=sys.stderr)
+        print(
+            "Usage: quorum-prescreen.py <target-file>\n"
+            "       quorum-prescreen.py --scan-links [DIR]",
+            file=sys.stderr,
+        )
         sys.exit(2)
 
     target = Path(sys.argv[1]).resolve()
