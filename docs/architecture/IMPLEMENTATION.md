@@ -2,7 +2,7 @@
 
 This guide walks through building Quorum from the architectural spec. It's structured as a reference walkthrough, not a copy-paste tutorial. The goal is understanding the patterns so you can adapt them to your stack.
 
-> **Implementation Status (v0.6.0):** This guide describes the full target architecture. The reference implementation ships 6 critics (5 callable in the pipeline), the fixer (proposal mode), parallel execution, batch processing, and pre-screen integration. Sections marked 🔜 describe planned components. See `critic-status.yaml` for the authoritative status matrix.
+> **Implementation Status (v0.7.2):** This guide describes the full target architecture. All 6 critics are shipped and callable: Correctness, Completeness, Security, Code Hygiene, Cross-Artifact Consistency, and Tester. Also shipped: the fixer (proposal mode), parallel execution, batch processing, and pre-screen integration. See `critic-status.yaml` for the authoritative status matrix. Sections below marked 🔜 describe components not yet built (Architecture, Delegation, Style).
 
 ---
 
@@ -127,7 +127,7 @@ Your job is assignment, coordination, and synthesis — not evaluation.
 
 ### 2.2 The Critics
 
-> ✅ **Shipped:** Correctness, Security, Completeness, Code Hygiene (+ Cross-Artifact Consistency in batch mode)
+> ✅ **Shipped:** Correctness, Completeness, Security, Code Hygiene, Cross-Artifact Consistency, Tester
 > 🔜 **Planned:** Architecture, Delegation & Coordination, Style
 
 Each critic receives:
@@ -196,9 +196,9 @@ The hardest agent to get right. Its job:
 
 ---
 
-## Phase 3: The Learning System 🔜
+## Phase 3: The Learning System
 
-> **Status:** Specified in architecture, not yet implemented. The mechanism below describes the target design.
+> **Status:** Shipped in v0.5.3. The `known_issues.json` system tracks failure patterns across runs with frequency-based promotion to mandatory checks.
 
 ### 3.1 Extracting Lessons
 
@@ -247,8 +247,8 @@ This is how past failures automatically improve future validation.
 ### 4.1 Quick (5-10 min)
 
 ```yaml
-critics: [correctness, security, completeness]
-tester: enabled
+critics: [correctness, completeness]
+tester: disabled
 fixer: disabled
 aggregator: simplified (no conflict resolution)
 fix_loops: 0
@@ -260,7 +260,7 @@ Use for: iterative development, fast feedback loops, low-stakes work.
 ### 4.2 Standard (15-30 min)
 
 ```yaml
-critics: [all 5 critics + tester]
+critics: [correctness, completeness, security + tester]
 fixer: enabled for CRITICAL only
 aggregator: full
 fix_loops: 1
@@ -272,7 +272,7 @@ Use for: most production work, configuration reviews, research validation.
 ### 4.3 Thorough (45-90 min)
 
 ```yaml
-critics: [all 5 critics + tester]
+critics: [correctness, completeness, security, code_hygiene + tester]
 fixer: enabled for CRITICAL + HIGH
 aggregator: full + external validator
 fix_loops: 2
@@ -281,6 +281,8 @@ cost_ceiling: $1.50
 ```
 
 Use for: critical decisions, pre-launch reviews, irreversible actions.
+
+**Note:** Cross-Artifact Consistency is a separate mode activated with the `--relationships` flag — it's additive at any depth, not part of the base critic panels above.
 
 ---
 

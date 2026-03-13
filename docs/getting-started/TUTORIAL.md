@@ -71,7 +71,7 @@ quorum run \
 
 1. **Supervisor** reads `bad-config.yaml`, loads `swarm-config-rubric.json`, writes `run-manifest.json`
 
-2. **Five critics** run in parallel:
+2. **Three critics + Tester** run at standard depth:
    - **Correctness Critic:** No factual errors, but notes the version is 1.0 with no changelog
    - **Security Critic:** Finds `$USER_QUERY` in spawn pattern — CRITICAL injection vector
    - **Completeness Critic:** Finds missing `model` on researcher — CRITICAL gap
@@ -97,7 +97,7 @@ quorum run \
 ```json
 {
   "verdict": "REVISE",
-  "confidence": 0.95,
+  "coverage": "12/14 criteria evaluated",
   "summary": "2 CRITICAL, 3 HIGH, 1 MEDIUM findings. Shell injection and missing model assignment must be resolved before production use.",
   "issues": [
     {
@@ -202,7 +202,7 @@ That's Quorum working as designed.
 - Try the research synthesis rubric on a LLM-generated report
 - Write a custom rubric for your domain
 - Run at `--depth thorough` for your next production deployment
-- Check `known_issues.json` after a few runs — patterns will start emerging *(learning memory is specified but not yet wired)*
+- Check `known_issues.json` after a few runs — learning memory tracks recurring patterns across runs (shipped v0.5.3)
 
 ---
 
