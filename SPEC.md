@@ -30,17 +30,28 @@ A single model reviewing a long prompt generates:
 - Hand-waving without evidence (LLMs can justify anything)
 - ~~No learning across validations~~ → **Solved in v0.5.3:** Learning memory tracks recurring patterns and promotes high-frequency findings to mandatory checks
 
-Quorum uses **nine specialized critics in parallel**, each with deep expertise in:
+Quorum's target architecture has **nine specialized agents** — six critics are currently shipped, with three more planned:
+
+**Shipped critics (6):**
 
 1. **Correctness Critic** — Factual accuracy, logical consistency, claim support
-2. **Security Critic** — Vulnerability patterns, permission issues, injection risks
-3. **Completeness Critic** — Coverage gaps, missing requirements, unaddressed edge cases
-4. **Architecture Critic** — Design coherence, pattern consistency, scalability concerns
-5. **Delegation & Coordination Critic** — Span of control, reversibility, bidirectional contracts
-6. **Tester Agent** — Executes validation (schema checks, git queries, web searches, shell execution)
-7. **Fixer Agent** — Generates fixes for CRITICAL/HIGH issues (optional, 1-2 loops max)
-8. **Aggregator Critic** — Merges findings, resolves conflicts, recalibrates confidence
-9. **Supervisor Agent** — Manages workflow, checkpoints, final verdict
+2. **Completeness Critic** — Coverage gaps, missing requirements, unaddressed edge cases
+3. **Security Critic** — Vulnerability patterns, permission issues, injection risks
+4. **Code Hygiene Critic** — ISO 25010 maintainability, naming, complexity metrics
+5. **Cross-Artifact Consistency Critic**† — Inter-file consistency (activated with `--relationships`)
+6. **Tester Agent** — Finding verification: deterministic checks + LLM claim validation
+
+**Shipped infrastructure agents:**
+
+7. **Fixer Agent** — Proposes and applies fixes for CRITICAL/HIGH findings (optional, 1-2 loops max)
+8. **Aggregator** — Merges findings, resolves conflicts, recalibrates confidence
+9. **Supervisor** — Manages workflow, checkpoints, final verdict
+
+**Planned critics (not yet built):**
+
+10. **Architecture Critic** — Design coherence, pattern consistency, scalability concerns
+11. **Delegation & Coordination Critic** — Span of control, reversibility, bidirectional contracts
+12. **Style Critic** — Writing quality, tone consistency, formatting standards
 
 Critics don't vote. The Aggregator synthesizes their findings into a final verdict with explicit confidence levels.
 
@@ -398,7 +409,7 @@ Additional runs on related artifacts reuse critic prompts and tools, amortizing 
 
 ## 8. Implementation Checklist
 
-Status as of v0.7.2 (reference implementation):
+Status as of v0.7.3 (reference implementation):
 
 - [x] LLM provider — LiteLLM universal provider (100+ models, any tier combination)
 - [x] File-based artifact passing (no in-memory state between agents)

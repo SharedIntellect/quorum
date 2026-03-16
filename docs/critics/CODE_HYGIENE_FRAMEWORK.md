@@ -21,7 +21,7 @@ The boundary is clean: when code hygiene detects a pattern that has security imp
 
 ## Status
 
-**v0.7.2 State:** Framework design complete. All features shipped.
+**v0.7.3 State:** Framework design complete. All features shipped.
 
 - [x] Framework design and documentation
 - [x] 12 evaluation categories specified

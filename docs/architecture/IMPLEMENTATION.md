@@ -2,7 +2,7 @@
 
 This guide walks through building Quorum from the architectural spec. It's structured as a reference walkthrough, not a copy-paste tutorial. The goal is understanding the patterns so you can adapt them to your stack.
 
-> **Implementation Status (v0.7.2):** This guide describes the full target architecture. All 6 critics are shipped and callable: Correctness, Completeness, Security, Code Hygiene, Cross-Artifact Consistency, and Tester. Also shipped: the fixer (proposal mode), parallel execution, batch processing, and pre-screen integration. See `critic-status.yaml` for the authoritative status matrix. Sections below marked 🔜 describe components not yet built (Architecture, Delegation, Style).
+> **Implementation Status (v0.7.3):** This guide describes the full target architecture. All 6 critics are shipped and callable: Correctness, Completeness, Security, Code Hygiene, Cross-Artifact Consistency, and Tester. Also shipped: the fixer (proposal mode), parallel execution, batch processing, and pre-screen integration. See `critic-status.yaml` for the authoritative status matrix. Sections below marked 🔜 describe components not yet built (Architecture, Delegation, Style).
 
 ---
 

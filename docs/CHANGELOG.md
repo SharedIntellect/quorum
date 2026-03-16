@@ -4,6 +4,20 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.3] — 2026-03-15
+
+### Fixed — Pre-Existing Code Findings Cleanup
+
+- **`__version__` corrected** — `reference-implementation/quorum/__init__.py` now reads `0.7.3` (was stuck at `0.5.3` since initial release; PyPI showed `0.7.2` but runtime `__version__` did not match)
+- **Broad exception handling narrowed** (prescreen.py) — PS-006 `except Exception` narrowed to `(OSError, UnicodeDecodeError)`; external tool integrations (Ruff, DevSkim, Bandit, PSSA) now log with `exc_info=True` for traceback capture on unexpected failures
+- **PSScriptAnalyzer security documentation** (prescreen.py) — Added comprehensive `# SECURITY:` comment explaining the PowerShell single-quote injection trust model for `_run_pssa`
+- **SPEC.md §2.1 overclaiming fixed** — Numbered agent list now separates shipped critics (6) from planned critics (3) and infrastructure agents; Code Hygiene and Cross-Artifact Consistency added (were missing from list despite being shipped)
+- **validate-docs.py hardcoded range removed** — `check_hardcoded_counts` `range(2, 9)` replaced with parameterized bounds derived from manifest total critic count
+- **validate-docs.py SRP cleanup** — Extracted `_extract_pyproject_version()` and `_extract_badge_versions()` as pure functions; `main()` refactored to delegate to `validate_docs()` (eliminated duplicated validation loop)
+- **Test exception handling** (test_batch_resilience.py) — Broad `except Exception` narrowed to `(json.JSONDecodeError, OSError)` with explanatory comment
+
+---
+
 ## [0.7.2] — 2026-03-12
 
 ### Documentation — Stale Content Cleanup (PR #18)

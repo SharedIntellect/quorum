@@ -138,8 +138,8 @@ class TestProgressiveManifest:
             for p in (tmp_path / "runs").glob("batch-*/batch-manifest.json"):
                 try:
                     manifests_seen.append(json.loads(p.read_text()))
-                except Exception:
-                    pass
+                except (json.JSONDecodeError, OSError):
+                    pass  # manifest may be partially written during race
             return original_validate(*args, **kwargs)
 
         # Create 3 files

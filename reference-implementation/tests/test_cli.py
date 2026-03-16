@@ -29,7 +29,7 @@ class TestCLIRoot:
     def test_version(self, runner):
         result = runner.invoke(cli, ["--version"])
         assert result.exit_code == 0
-        assert "0.5.3" in result.output
+        assert "0.7.3" in result.output
 
     def test_no_command_shows_usage(self, runner):
         result = runner.invoke(cli, [])
