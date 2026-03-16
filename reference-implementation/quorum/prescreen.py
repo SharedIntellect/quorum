@@ -240,8 +240,7 @@ class PreScreen:
             ruff_checks = self._findings_to_checks(ruff_findings, "ruff")
             checks.extend(ruff_checks)
         except Exception as e:
-            logger.warning("Ruff integration failed: %s", e)
-            # Graceful degradation: treat as "no issues found" when tool fails
+            logger.warning("Ruff integration failed: %s", e, exc_info=True)
             checks.append(_pass("EXT-RUFF", "ruff_analysis", "external_tools",
                                Severity.INFO, "No issues found by ruff (tool unavailable)"))
 
@@ -251,8 +250,7 @@ class PreScreen:
             devskim_checks = self._findings_to_checks(devskim_findings, "devskim")
             checks.extend(devskim_checks)
         except Exception as e:
-            logger.warning("DevSkim integration failed: %s", e)
-            # Graceful degradation: treat as "no issues found" when tool fails
+            logger.warning("DevSkim integration failed: %s", e, exc_info=True)
             checks.append(_pass("EXT-DEVSKIM", "devskim_analysis", "external_tools",
                                Severity.INFO, "No issues found by devskim (tool unavailable)"))
 
@@ -264,7 +262,7 @@ class PreScreen:
                 bandit_checks = self._findings_to_checks(bandit_findings, "bandit")
                 checks.extend(bandit_checks)
             except Exception as e:
-                logger.warning("Bandit integration failed: %s", e)
+                logger.warning("Bandit integration failed: %s", e, exc_info=True)
                 checks.append(_pass("EXT-BANDIT", "bandit_analysis", "external_tools",
                                    Severity.INFO, "No issues found by bandit (tool unavailable)"))
 
@@ -275,7 +273,7 @@ class PreScreen:
                 pssa_checks = self._findings_to_checks(pssa_findings, "pssa")
                 checks.extend(pssa_checks)
             except Exception as e:
-                logger.warning("PSScriptAnalyzer integration failed: %s", e)
+                logger.warning("PSScriptAnalyzer integration failed: %s", e, exc_info=True)
                 checks.append(_pass("EXT-PSSA", "pssa_analysis", "external_tools",
                                    Severity.INFO, "No issues found by pssa (tool unavailable)"))
 
@@ -447,9 +445,9 @@ class PreScreen:
                          f"Python syntax error at {loc}",
                          msg, [loc] if loc_match else [])
 
-        except Exception as exc:
+        except (OSError, UnicodeDecodeError) as exc:
             return _skip("PS-006", "python_syntax", "syntax", Severity.HIGH,
-                         "Python syntax check", f"Could not compile: {exc}")
+                         "Python syntax check", f"Could not compile ({type(exc).__name__}): {exc}")
 
         finally:
             if tmp_path:
@@ -855,7 +853,10 @@ class PreScreen:
         }
 
         try:
-            # Escape single quotes in path to prevent PowerShell command injection
+            # SECURITY: PowerShell command injection mitigated.  Single-quoted strings
+            # in PowerShell don't expand variables/backticks/subexpressions; only
+            # internal single quotes need doubling (' → ''), which we do below.
+            # artifact_path originates from filesystem resolution, not user input.
             escaped_path = str(artifact_path).replace("'", "''")
             ps_command = (
                 f"Invoke-ScriptAnalyzer -Path '{escaped_path}' "

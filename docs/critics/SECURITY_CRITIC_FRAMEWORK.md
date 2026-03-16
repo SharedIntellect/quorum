@@ -11,7 +11,7 @@
 
 ## Status
 
-**v0.7.2 State:** Framework design complete. All features shipped.
+**v0.7.3 State:** Framework design complete. All features shipped.
 
 - [x] Framework design and documentation
 - [x] 14 evaluation categories (SEC-01–SEC-14) specified

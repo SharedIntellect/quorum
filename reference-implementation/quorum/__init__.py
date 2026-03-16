@@ -9,5 +9,5 @@ code, operational procedures) against domain-specific rubrics using parallel
 specialized critics, each required to provide grounded evidence.
 """
 
-__version__ = "0.5.3"
+__version__ = "0.7.3"
 __all__ = ["__version__"]

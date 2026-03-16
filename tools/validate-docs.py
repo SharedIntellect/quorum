@@ -122,7 +122,9 @@ def read_file_lines(file_path: Path) -> list[str] | None:
         return None
 
 
-def check_hardcoded_counts(lines: list[str], shipped_count: int, file_path: Path) -> list[str]:
+def check_hardcoded_counts(
+    lines: list[str], shipped_count: int, total_count: int, file_path: Path,
+) -> list[str]:
     """Flag lines with hardcoded critic counts that don't match shipped count."""
     findings: list[str] = []
     # Match patterns like "4 critics", "ships with 4", "currently 5 critics"
@@ -165,7 +167,7 @@ def check_hardcoded_counts(lines: list[str], shipped_count: int, file_path: Path
                 n = int(match.group(1))
                 # Only flag if it looks like a shipped count that's wrong
                 # Skip 9 (total architecture), 3 (planned), and the correct count
-                if n != shipped_count and n in range(2, 9) and n != 9:
+                if n != shipped_count and n != total_count and 2 <= n <= total_count:
                     # Skip lines about specific depth profiles with intentionally fewer critics
                     # (e.g., "quick" depth legitimately runs 2 critics)
                     if "quick" in line_lower and n == 2:
@@ -263,33 +265,40 @@ def check_roadmap_shipped(
     return findings
 
 
+def _extract_pyproject_version(content: str) -> str | None:
+    """Extract the version string from pyproject.toml content (pure)."""
+    match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _extract_badge_versions(content: str) -> list[str]:
+    """Extract version strings from badge markup in README content (pure)."""
+    badge_pattern = re.compile(r'badge[/](?:version-)?v?(\d+\.\d+\.\d+)')
+    return [m.group(1) for m in badge_pattern.finditer(content)]
+
+
 def check_version_consistency(repo_root: Path, manifest_version: str) -> list[str]:
     """Check that version strings across the repo match the manifest version."""
     findings: list[str] = []
 
-    # Check pyproject.toml
     pyproject = repo_root / "reference-implementation" / "pyproject.toml"
     if pyproject.exists():
         try:
             content = pyproject.read_text(encoding="utf-8")
-            version_match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
-            if version_match and version_match.group(1) != manifest_version:
+            pyproject_ver = _extract_pyproject_version(content)
+            if pyproject_ver and pyproject_ver != manifest_version:
                 findings.append(
-                    f"  pyproject.toml: version=\"{version_match.group(1)}\" "
+                    f"  pyproject.toml: version=\"{pyproject_ver}\" "
                     f"(manifest={manifest_version})"
                 )
         except OSError:
             pass
 
-    # Check README for badge version mismatches
     readme = repo_root / "README.md"
     if readme.exists():
         try:
             content = readme.read_text(encoding="utf-8")
-            # Match badge patterns like: badge/version-v0.5.3 or badge/v0.5.3
-            badge_pattern = re.compile(r'badge[/](?:version-)?v?(\d+\.\d+\.\d+)')
-            for match in badge_pattern.finditer(content):
-                badge_ver = match.group(1)
+            for badge_ver in _extract_badge_versions(content):
                 if badge_ver != manifest_version:
                     findings.append(
                         f"  README.md: badge version \"{badge_ver}\" "
@@ -396,6 +405,7 @@ def validate_docs(repo_root: Path) -> list[str]:
     manifest = load_manifest(repo_root)
     shipped = get_critics_by_status(manifest, "shipped")
     shipped_count = len(shipped)
+    total_count = len(manifest.get("critics", {}))
     manifest_version = manifest.get("version", "unknown")
 
     md_files = find_md_files(repo_root)
@@ -414,7 +424,7 @@ def validate_docs(repo_root: Path) -> list[str]:
             continue
 
         rel_path = md_file.relative_to(repo_root)
-        all_findings.extend(check_hardcoded_counts(lines, shipped_count, rel_path))
+        all_findings.extend(check_hardcoded_counts(lines, shipped_count, total_count, rel_path))
         all_findings.extend(check_stale_status_markers(lines, shipped, rel_path))
         all_findings.extend(check_roadmap_shipped(lines, shipped, rel_path))
         all_findings.extend(check_depth_config_claims(lines, manifest, rel_path))
@@ -429,10 +439,10 @@ def main() -> int:
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent
 
+    # Print manifest summary for human readers
     manifest = load_manifest(repo_root)
     shipped = get_critics_by_status(manifest, "shipped")
     planned = get_critics_by_status(manifest, "planned")
-    shipped_count = len(shipped)
     manifest_version = manifest.get("version", "unknown")
 
     callable_critics = {
@@ -442,7 +452,7 @@ def main() -> int:
     depth_configs = manifest.get("depth_configs", {})
 
     print(f"Manifest version: {manifest_version}")
-    print(f"Shipped critics ({shipped_count}): {', '.join(shipped.keys())}")
+    print(f"Shipped critics ({len(shipped)}): {', '.join(shipped.keys())}")
     print(f"Callable critics ({len(callable_critics)}): {', '.join(sorted(callable_critics))}")
     print(f"Planned critics ({len(planned)}): {', '.join(planned.keys())}")
     if depth_configs:
@@ -453,25 +463,8 @@ def main() -> int:
     md_files = find_md_files(repo_root)
     print(f"Scanning {len(md_files)} markdown files...\n")
 
-    all_findings: list[str] = []
-
-    # Version consistency check
-    version_findings = check_version_consistency(repo_root, manifest_version)
-    if version_findings:
-        all_findings.append("VERSION MISMATCH:")
-        all_findings.extend(version_findings)
-
-    for md_file in md_files:
-        lines = read_file_lines(md_file)
-        if lines is None:
-            continue
-
-        rel_path = md_file.relative_to(repo_root)
-        all_findings.extend(check_hardcoded_counts(lines, shipped_count, rel_path))
-        all_findings.extend(check_stale_status_markers(lines, shipped, rel_path))
-        all_findings.extend(check_roadmap_shipped(lines, shipped, rel_path))
-        all_findings.extend(check_depth_config_claims(lines, manifest, rel_path))
-        all_findings.extend(check_framework_version_strings(lines, manifest_version, rel_path))
+    # Delegate validation logic (no duplication with validate_docs())
+    all_findings = validate_docs(repo_root)
 
     if all_findings:
         print(f"FINDINGS ({len(all_findings)}):\n")
