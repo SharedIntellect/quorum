@@ -43,7 +43,7 @@ Quorum's target architecture has **nine specialized agents** — six critics are
 
 **Shipped infrastructure agents:**
 
-7. **Fixer Agent** — Proposes and applies fixes for CRITICAL/HIGH findings (optional, 1-2 loops max)
+7. **Fixer Agent** — Proposes and applies fixes for CRITICAL/HIGH findings (optional, up to 3 loops)
 8. **Aggregator** — Merges findings, resolves conflicts, recalibrates confidence
 9. **Supervisor** — Manages workflow, checkpoints, final verdict
 
@@ -415,14 +415,14 @@ Status as of v0.7.3 (reference implementation):
 - [x] File-based artifact passing (no in-memory state between agents)
 - [x] Pre-screen layer — 10 built-in checks (PS-001–PS-010) + DevSkim SAST integration
 - [x] 6 critics implemented — Correctness, Completeness, Security, Code Hygiene, Cross-Artifact Consistency† (`--relationships`), Tester (L1 + L2)
-- [x] Rubric system (JSON schema + validator, 3 built-in rubrics: research-synthesis, agent-config, python-code)
+- [x] Rubric system (JSON schema + validator, 4 built-in rubrics: research-synthesis, agent-config, python-code, documentation)
 - [x] Batch/multi-file validation with `BatchVerdict`
 - [x] Aggregator synthesis logic (conflict resolution)
 - [x] Verdict assignment logic (PASS/PASS_WITH_NOTES/REVISE/REJECT)
 - [x] Depth preset system (quick/standard/thorough YAML configs)
 - [x] Path traversal security (boundary enforcement)
 - [x] Exit codes (0/1/2)
-- [x] Parallel critic dispatch (ThreadPoolExecutor, max 6 critics; batch files max 3)
+- [x] Parallel critic dispatch (ThreadPoolExecutor, max 4 critics; batch files max 3)
 - [x] Fixer agent — proposal mode + re-validation loops (Phase 1.5; proposes and applies text replacements for CRITICAL/HIGH, then re-runs critics to verify)
 - [x] Python code rubric (25 criteria, PC-001–PC-025, auto-detects on .py files)
 - [x] Learning memory system (known_issues.json frequency tracking + mandatory check promotion — shipped in v0.5.3)
