@@ -33,7 +33,7 @@ The following findings were identified during local documentation validation (st
 
 ### F-008: SKILL.md critic count stale — MEDIUM
 
-- **What:** SKILL.md frontmatter stated "4 critics" — stale since v0.7.0 shipped tester + code_hygiene
+- **What:** SKILL.md frontmatter stated a stale critic count — not updated after v0.7.0 shipped tester + code_hygiene
 - **Critic:** documentation (local validation)
 - **Fix:** Updated to "6 critics"
 
