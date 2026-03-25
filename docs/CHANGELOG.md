@@ -4,6 +4,23 @@ All notable changes to Quorum will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added — Copilot CLI Port: Portable Critic Definitions (PRs #24, #25)
+
+- **YAML-based portable critic definitions** — Evaluation logic extracted from Python critic classes into structured YAML files consumable by any Quorum port (CLI, Claude Code, Copilot). Each YAML contains: system prompt, evaluation categories with framework references, prompt template with variable placeholders, rubric keyword filter, output schema, and pre-screen integration rules.
+  - `critics/correctness.yaml` — 5 categories (COR-01–05): internal contradictions, logical consistency, factual claims, reference accuracy, terminology consistency
+  - `critics/security.yaml` — 14 categories (SEC-01–14) in 3 evaluation tiers, grounded in OWASP ASVS 5.0, CWE Top 25 (2024), NIST SP 800-53 SA-11
+  - `critics/completeness.yaml` — 5 categories (COM-01–05): missing sections, shallow treatment, edge cases, broken promises, requirement gaps
+  - `critics/code_hygiene.yaml` — 12 categories (CAT-01–12) + 6 agentic patterns (AP-01–06), mapped to ISO/IEC 25010:2023 and ISO/IEC 5055:2021 (CISQ)
+- **`verdict-rules.yaml`** — Deterministic aggregation rules, deduplication threshold, and escalation logic as a standalone shared file
+- **`rubrics/documentation.json`** — 12-criteria documentation quality rubric (DOC-001–DOC-012)
+- **`learning/known_issues.json`** — Empty scaffold for pattern accumulation across validation runs
+- **Rewritten SKILL.md orchestrator** — Full 4-critic orchestration with adaptive dispatch tiers (sequential default, opt-in concurrency), progress indicators, error degradation (DEGRADED/PARTIAL/QUORUM_FAILED), and delegation boundary between Code Hygiene and Security critics
+- **Updated README.md** — Reflects new file layout and explains the portable critic definition architecture
+
+---
+
 ## [0.7.3] — 2026-03-15
 
 ### Fixed — Pre-Existing Code Findings Cleanup
