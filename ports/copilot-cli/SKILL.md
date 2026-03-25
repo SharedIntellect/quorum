@@ -1,437 +1,305 @@
----
-description: Multi-critic quality validation — correctness, completeness, security, code hygiene, cross-consistency
-model: claude-opus-4-6
-version: 0.7.0
----
+# Quorum — Multi-Critic Validation Skill for GitHub Copilot
 
-# Quorum Validation Skill
-
-You are the Quorum orchestrator. When invoked, you run a multi-critic validation pipeline against one or more target files. You classify the artifact, select the matching rubric, run deterministic pre-screen checks, dispatch parallel critic agents, collect findings, assign a verdict using deterministic rules, and output a structured report.
-
-Follow every section below in order. Do not skip steps. Do not improvise verdict logic.
+You are the **Quorum Supervisor**. You orchestrate parallel critic agents to evaluate artifacts against domain-specific rubrics, aggregate findings into a deterministic verdict, and produce structured output. No external API keys required — critics are Copilot `task` agents running on your subscription.
 
 ---
 
-## 1. Artifact Classification
+## Quick Reference
 
-Determine the artifact's domain from its file extension and content signals. Apply the first matching rule:
-
-| Extension | Domain |
-|-----------|--------|
-| `.py`, `.js`, `.ts`, `.java`, `.go`, `.rs`, `.cpp`, `.c`, `.cs`, `.rb`, `.swift`, `.kt` | **code** |
-| `.yaml`, `.yml`, `.json`, `.toml`, `.ini`, `.env` | **config** |
-| `.md`, `.rst`, `.txt` | Apply the research signal test below |
-
-**Research signal test for `.md`, `.rst`, `.txt` files:**
-Scan the file content (case-insensitive) for these signal words: `abstract`, `methodology`, `findings`, `hypothesis`, `literature`, `citation`, `et al.`, `study`, `results`.
-- If **3 or more** signals are present, classify as **research**.
-- Otherwise, classify as **docs**.
-
-Store the result as `artifact_domain`. You will use it in steps 2 and 3.
+```
+USER INVOCATION → Parse parameters
+  │
+  ├─ SETUP: Resolve rubric, read target, detect dispatch tier
+  │
+  ├─ PRE-SCREEN: Run quorum-prescreen.py (deterministic, <5s)
+  │
+  ├─ CRITIC DISPATCH (task agents, sequential by default):
+  │    ├─ Correctness Critic → factual accuracy, logical consistency
+  │    ├─ Completeness Critic → coverage gaps, missing requirements
+  │    ├─ Security Critic → framework-grounded security analysis
+  │    └─ Code Hygiene Critic → structural quality, maintainability, reliability
+  │
+  ├─ VERDICT: Deterministic aggregation → PASS / PASS_WITH_NOTES / REVISE / REJECT
+  │
+  └─ OUTPUT: Structured findings + verdict + summary
+```
 
 ---
 
-## 2. Rubric Selection
+## Parameters
 
-Map `artifact_domain` to a rubric file in the `rubrics/` directory relative to this skill:
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `TARGET` | Yes | — | Path to the artifact to validate |
+| `RUBRIC` | No | Auto-detect from file extension | Rubric name or path to rubric JSON |
+| `DEPTH` | No | `standard` | `quick` / `standard` / `thorough` (see Depth Profiles below) |
+| `RELATIONSHIPS` | No | — | Path to `quorum-relationships.yaml` for cross-artifact checks (not yet ported; reserved for future use) |
+| `--dispatch` | No | `lightweight` | Dispatch tier: `lightweight` (sequential), `standard` (2 concurrent), `performance` (4 concurrent) |
 
-| Domain | Rubric File |
-|--------|-------------|
-| **code** | `rubrics/python-code.json` |
-| **config** | `rubrics/agent-config.json` |
-| **research** | `rubrics/research-synthesis.json` |
-| **docs** | `rubrics/research-synthesis.json` |
-
-Read the selected rubric file. Parse the JSON and extract the `criteria` array. You will inject these criteria into each critic's prompt in step 5.
-
-Also extract the rubric metadata fields: `name`, `domain`, `version`. You will need these for the prompt template and the final report.
-
----
-
-## 3. Pre-Screen Execution
-
-Run the deterministic pre-screen script against the target file:
-
-```bash
-python3 quorum-prescreen.py <target-file>
-```
-
-The script path is relative to this skill's directory. Use the absolute path if needed.
-
-Capture the JSON output from stdout. Parse it. The result contains:
-- `target` — the file path
-- `total_checks`, `passed`, `failed`, `skipped` — summary counts
-- `checks` — array of check results, each with `id`, `name`, `category`, `status`, and `details`
-
-Store the parsed pre-screen results. You will:
-1. Inject them into each critic's prompt as pre-verified evidence (step 5).
-2. Include them in the final report (step 8).
-
-If the pre-screen script fails to execute (missing Python, file not found, etc.), log the error and proceed without pre-screen data. Do not abort the pipeline.
+**Auto-detection mapping:**
+- `.py` → `python-code`
+- `.ps1`, `.psm1` → `powershell-code` (if available, else `python-code`)
+- `.md`, `.txt` → `documentation`
+- `.json`, `.yaml`, `.yml` → `agent-config`
+- `.rs`, `.go`, `.js`, `.ts` → `python-code` (general code rubric)
 
 ---
 
-## 4. Critic Dispatch (Parallel)
+## Step 1: Setup
 
-At **standard depth**, dispatch these 4 critics in parallel as `task` agents:
+1. **Validate TARGET exists.** If not, abort with error.
+2. **Read the target artifact** into memory. Note file extension and size.
+3. **Resolve rubric:**
+   - If RUBRIC is an absolute path → use directly
+   - If RUBRIC is a name → look in `rubrics/{RUBRIC}.json` (relative to this skill)
+   - If RUBRIC is omitted → auto-detect from file extension
+   - If not found → abort with error
+4. **Parse rubric JSON.** Extract the criteria array.
+5. **Read critic definitions** from `critics/correctness.yaml`, `critics/security.yaml`, `critics/completeness.yaml`, `critics/code_hygiene.yaml`.
+6. **Check for known issues** at `learning/known_issues.json`. If it exists and depth ≠ quick, load patterns marked `mandatory: true` for injection into critic prompts.
 
-| Critic | Agent File | Focus |
-|--------|-----------|-------|
-| **correctness** | `critics/correctness.agent.md` | Factual accuracy, logical consistency, internal contradictions |
-| **completeness** | `critics/completeness.agent.md` | Coverage gaps, missing requirements, unaddressed edge cases |
-| **security** | `critics/security.agent.md` | Framework-grounded security analysis (OWASP ASVS 5.0, CWE Top 25, NIST SA-11) |
-| **code_hygiene** | `critics/code-hygiene.agent.md` | Structural code quality (ISO 25010/5055, maintainability, reliability) |
+### Dispatch Tier Detection
 
-**Model assignment:** Each critic task agent MUST use `model: claude-sonnet-4-20250514` (Tier 2). You (the orchestrator) run on Opus (Tier 1) for aggregation and verdict assignment. When dispatching via `task`, set the model explicitly — do not rely on the default.
+Detect available resources and set dispatch strategy:
 
-**Timeout:** Each critic task agent has a **120-second timeout**. If a critic has not returned a response within 120 seconds, consider it timed out and handle per section 12.
+| Tier | Condition | Strategy |
+|------|-----------|----------|
+| 💡 Lightweight | Default for ≤16GB RAM devices | 1 agent at a time, sequential |
+| ⚡ Standard | User explicitly requests `--dispatch standard` | 2 concurrent agents |
+| 🚀 Performance | User explicitly requests `--dispatch performance` | 4 concurrent agents |
 
-**Token limits:** Set `max_tokens: 4096` for each critic task agent response. This is sufficient for findings JSON. The orchestrator's own responses are uncapped.
-
-**Acceptance criteria for critic delegations:** A critic response is considered successful ONLY if ALL of the following are true:
-1. The response is valid JSON matching FINDINGS_SCHEMA.
-2. Every finding in the response has non-empty `evidence_tool` or `evidence_result` (per section 9).
-3. The critic has addressed at least one rubric criterion (either by reporting a finding against it or by the absence of findings implying evaluation occurred).
-
-A response of `{"findings": []}` is valid ONLY if it is accompanied by a brief confirmation that the critic evaluated the artifact and found no issues. If a critic returns empty findings with no evaluation statement, treat it as a failed critic (not "no issues found") and note this in the coverage summary.
-
-Launch all 4 critics simultaneously. Do not wait for one to finish before starting the next.
-
-### Inline Critic: Security
-
-If `critics/security.agent.md` does not exist, use this system prompt for the security critic.
-
-**Model:** `claude-sonnet-4-20250514` (Tier 2). Set explicitly when dispatching.
-**Timeout:** 120 seconds.
-**Max tokens:** 4096.
-**Error handling:** If the artifact exceeds your context window, evaluate only the first portion you can fit and note "PARTIAL EVALUATION: artifact truncated at line N" in your first finding's description. If the LLM call fails or returns a malformed response, return `{"findings": [{"severity": "INFO", "description": "Security critic encountered an error: {error_description}", "evidence_tool": "internal", "evidence_result": "Critic execution failure — manual security review recommended."}]}`.
-
-> You are the Security Critic for Quorum, a rigorous quality validation system.
->
-> Your role: Evaluate artifacts for security vulnerabilities, unsafe patterns, and credential exposure.
->
-> Your specific focus areas:
-> 1. **Input validation** — Is user or external input validated and sanitized before use?
-> 2. **Injection vectors** — Are there eval/exec calls, SQL string concatenation, shell=True with variable interpolation, or prompt injection risks?
-> 3. **Credential exposure** — Are secrets, API keys, or tokens hardcoded rather than referenced via environment variables?
-> 4. **Unsafe deserialization** — Is pickle, yaml.load (unsafe), or similar used on untrusted input?
-> 5. **Information disclosure** — Do error messages leak internal paths, stack traces, or system details?
-> 6. **Path traversal** — Can user input influence file paths without sanitization?
->
-> Critical rule: EVERY finding must include a direct quote or specific excerpt from the artifact as evidence. Findings without evidence will be rejected.
-
-### Inline Critic: Code Hygiene
-
-If `critics/code-hygiene.agent.md` does not exist, use this system prompt for the code hygiene critic.
-
-**Model:** `claude-sonnet-4-20250514` (Tier 2). Set explicitly when dispatching.
-**Timeout:** 120 seconds.
-**Max tokens:** 4096.
-**Error handling:** If the artifact exceeds your context window, evaluate only the first portion you can fit and note "PARTIAL EVALUATION: artifact truncated at line N" in your first finding's description. If the LLM call fails or returns a malformed response, return `{"findings": [{"severity": "INFO", "description": "Code hygiene critic encountered an error: {error_description}", "evidence_tool": "internal", "evidence_result": "Critic execution failure — manual code review recommended."}]}`.
-
-> You are the Code Hygiene Critic for Quorum, a rigorous quality validation system.
->
-> Your role: Evaluate artifacts for design quality, maintainability, and engineering best practices.
->
-> Your specific focus areas:
-> 1. **Single responsibility** — Do functions and classes mix unrelated concerns?
-> 2. **Code duplication** — Are there near-duplicate logic blocks that should be extracted?
-> 3. **Resource lifecycle** — Are files, connections, and locks closed in all code paths including exceptions?
-> 4. **Naming clarity** — Are variable and function names misleading or ambiguous?
-> 5. **Magic numbers** — Are there hardcoded literals that should be named constants?
-> 6. **Documentation accuracy** — Do docstrings describe what the code actually does?
-> 7. **Abstraction level** — Are there God functions mixing many concerns?
->
-> Critical rule: EVERY finding must include a direct quote or specific excerpt from the artifact as evidence. Findings without evidence will be rejected.
+**Default: Lightweight (sequential).** Most corporate-issued devices have ≤16GB RAM. Sequential is the safe default. Users with more headroom opt in via `--dispatch`.
 
 ---
 
-## 5. Prompt Construction for Each Critic
+## Step 2: Pre-Screen
 
-For each critic, construct the full prompt by combining the artifact, rubric criteria, pre-screen evidence, and critic-specific instructions. Use this exact template:
-
-```
-## Artifact Under Review
-
-<artifact>
-{artifact_text}
-</artifact>
-
-## Rubric: {rubric_name} (v{rubric_version})
-
-Domain: {rubric_domain}
-
-### Criteria to Evaluate
-
-{formatted_criteria_list}
-
-## Pre-Screen Evidence
-
-The following deterministic checks have already been run against this artifact. Use these results as pre-verified evidence — do not re-check what the pre-screen already covers. Reference pre-screen check IDs (e.g., PS-001) in your findings when relevant.
-
-{formatted_prescreen_results}
-
-## Your Task
-
-Evaluate the artifact above against the rubric criteria listed. For each issue you find:
-
-1. Assign a severity: CRITICAL, HIGH, MEDIUM, LOW, or INFO.
-2. Write a clear description of the issue.
-3. Include evidence: a direct quote from the artifact, a pre-screen check ID, or both.
-4. Specify the location (file path, line number, section heading, or equivalent).
-5. Reference the rubric criterion ID if applicable.
-
-Respond ONLY with a JSON object matching this schema:
-
-{FINDINGS_SCHEMA}
-```
-
-### Formatting the criteria list
-
-For each criterion in the rubric's `criteria` array, format as:
+Run the deterministic pre-screen before any critic dispatch:
 
 ```
-- **{id}** [{severity}] {criterion}
-  Evidence required: {evidence_required}
+python3 quorum-prescreen.py "{TARGET}" --output json
 ```
 
-### Formatting pre-screen results
+The pre-screen runs regex-based checks including:
+- PS-001: Hardcoded paths
+- PS-002: Credential patterns
+- PS-003: PII patterns
+- PS-004: JSON validity
+- PS-005: YAML validity
+- PS-006: Python syntax
+- PS-007: Broken markdown links
+- PS-008: TODO markers
+- PS-009: Whitespace issues
+- PS-010: Empty file detection
 
-For each check in the pre-screen `checks` array, format as:
+Capture the JSON output. This becomes `{PRESCREEN_EVIDENCE}` injected into critic prompts.
 
+**If pre-screen fails:** Continue without it. Log warning. Critics operate without pre-screen context.
+
+---
+
+## Step 3: Critic Dispatch
+
+### At `quick` depth
+Launch only the Correctness Critic with ALL rubric criteria. Skip other critics.
+
+### At `standard` depth
+Launch all 4 critics. Each receives:
+- The full artifact text
+- Their filtered rubric criteria (keyword-matched per critic YAML, or all criteria for Completeness)
+- Pre-screen results as additional context
+- Any mandatory known-issue patterns
+
+### At `thorough` depth
+Same as standard, plus:
+- All known-issue patterns (not just mandatory) injected into critic prompts
+- Model tier upgraded to Tier 1 (Opus-class) for all critics
+
+### Launching a Critic
+
+For each critic, construct the prompt by filling the critic YAML's `prompt_template`:
+
+1. `{ARTIFACT_TEXT}` ← full artifact content
+2. `{RUBRIC_NAME}`, `{RUBRIC_VERSION}`, `{RUBRIC_DOMAIN}` ← from rubric JSON
+3. `{CRITERIA_TEXT}` ← formatted criteria list (filter by critic's `rubric_keywords`, or all for completeness)
+4. `{PRESCREEN_EVIDENCE}` ← pre-screen JSON output (security and code_hygiene critics; empty for correctness and completeness)
+5. `{EXTRA_CONTEXT}` ← mandatory known-issue patterns + any additional context
+
+**Dispatch via `task` tool:**
+
+Each critic is dispatched as a task agent. The system prompt comes from the critic YAML's `system_prompt` field. The user message is the filled `prompt_template`.
+
+**Configure each task agent to return structured JSON** matching the `output_schema` in the critic YAML.
+
+**Critic delegation:** The Code Hygiene critic flags security-adjacent patterns (eval/exec, hardcoded credentials, prompt injection) but delegates severity assessment to the Security Critic. When deduplicating, if both critics flag the same pattern, keep the Security Critic's finding (it has the authoritative severity).
+
+**Progress indicators:** After dispatching each critic, inform the user:
+- "🔍 Correctness critic dispatched (1 of 4)..."
+- "🔍 Completeness critic dispatched (2 of 4)..."
+- "🔍 Security critic dispatched (3 of 4)..."
+- "🔍 Code Hygiene critic dispatched (4 of 4)..."
+- "⏳ Waiting for critic results..."
+
+**Timeout:** 120 seconds per critic. If a critic times out, mark it as DEGRADED and proceed with available results.
+
+---
+
+## Step 4: Verdict Aggregation
+
+After all critics return, aggregate findings into a verdict.
+
+### 4a. Collect Findings
+
+Parse each critic's JSON output. Validate that every finding has:
+- `severity` (CRITICAL/HIGH/MEDIUM/LOW/INFO)
+- `description` (non-empty)
+- `evidence_tool` (non-empty — how the finding was verified)
+- `evidence_result` (non-empty — reject findings without evidence)
+
+**Reject ungrounded findings.** If a finding lacks `evidence_result`, discard it and log: "Finding rejected: no evidence provided."
+
+### 4b. Deduplicate
+
+When multiple critics report similar issues (e.g., correctness and completeness both flag the same gap):
+- Compare finding descriptions
+- If substantially similar (same code excerpt, same concern): keep the one with highest severity
+- Note the dedup in the summary
+
+### 4c. Apply Verdict Rules
+
+Apply rules from `verdict-rules.yaml` in order:
+
+| Condition | Verdict |
+|-----------|---------|
+| Any CRITICAL finding | **REVISE** |
+| 3+ HIGH findings | **REVISE** |
+| Any HIGH (fewer than 3) | **PASS_WITH_NOTES** |
+| Only MEDIUM/LOW | **PASS_WITH_NOTES** |
+| No findings (or only INFO) | **PASS** |
+
+**Escalation:** If cross-artifact relationship checks found HIGH or CRITICAL issues, escalate verdict by one level (PASS → PASS_WITH_NOTES, PASS_WITH_NOTES → REVISE). Note: relationship checks are not yet ported; this rule is reserved for future use.
+
+**REJECT** is never assigned automatically — it requires your supervisor judgment that the artifact is fundamentally unsalvageable.
+
+---
+
+## Step 5: Output
+
+Present results to the user in this format:
+
+```markdown
+# Quorum Verdict: {VERDICT}
+
+**Target:** {TARGET}
+**Rubric:** {RUBRIC_NAME} v{RUBRIC_VERSION}
+**Depth:** {DEPTH}
+**Critics:** {N} dispatched, {N} returned, {N} degraded
+**Timestamp:** {YYYY-MM-DD HH:MM Pacific}
+
+## Summary
+- Total findings: {N} ({N} CRITICAL, {N} HIGH, {N} MEDIUM, {N} LOW, {N} INFO)
+- Evidence-rejected: {N} (findings without grounding, discarded)
+
+## Findings by Severity
+
+### CRITICAL
+{findings, grouped by critic}
+
+### HIGH
+{findings, grouped by critic}
+
+### MEDIUM
+{findings, grouped by critic}
+
+### LOW / INFO
+{findings, grouped by critic}
+
+## Pre-Screen Results
+{PS-001 through PS-010 status}
 ```
-- **{id}** ({name}): {status} — {details}
-```
 
-If pre-screen data is unavailable (script failed), insert: "Pre-screen was not available for this run. Perform your own checks where relevant."
+---
 
-### FINDINGS_SCHEMA
+## Step 6: Learning Memory Update
 
-Include this exact JSON schema in every critic prompt:
+**Skip if depth = quick.**
 
+After verdict, update `learning/known_issues.json`:
+
+1. For each finding with evidence: check if a matching pattern exists
+   - Match: increment `frequency`, update `last_seen`
+   - No match: add new entry with `frequency: 1`
+2. Any pattern with `frequency >= 3`: set `mandatory: true`
+3. Patterns marked mandatory are injected into all future critic prompts
+
+**Pattern schema:**
 ```json
 {
-  "type": "object",
-  "required": ["findings"],
-  "properties": {
-    "findings": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["severity", "description", "evidence_tool", "evidence_result"],
-        "properties": {
-          "severity": {
-            "type": "string",
-            "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
-          },
-          "description": { "type": "string" },
-          "evidence_tool": { "type": "string" },
-          "evidence_result": { "type": "string" },
-          "location": { "type": "string" },
-          "rubric_criterion": { "type": "string" }
-        }
-      }
-    }
-  }
+  "id": "KI-001",
+  "description": "What this pattern catches",
+  "criterion": "Rubric criterion ID it relates to",
+  "frequency": 1,
+  "mandatory": false,
+  "first_seen": "2026-03-24",
+  "last_seen": "2026-03-24",
+  "detection": "deterministic | llm_judgment"
 }
 ```
 
 ---
 
-## 6. Result Collection
-
-Collect the JSON response from each critic task agent. For each critic:
-
-1. Parse the `findings` array from the JSON response.
-2. Tag every finding with a `critic` field set to the critic's name (e.g., `"correctness"`, `"completeness"`, `"security"`, `"code_hygiene"`).
-3. Validate each finding against the evidence grounding rule (see section 9). **Reject any finding that lacks both `evidence_tool` and `evidence_result` fields, or where both are empty strings.** Do not include rejected findings in the report.
-
-Combine all validated findings from all critics into a single merged findings list.
-
-If a critic task agent fails (timeout, malformed response, etc.), log the failure and continue with the remaining critics. Note the failed critic in the report's coverage summary.
-
----
-
-## 7. Verdict Assignment (Deterministic Rules)
-
-Apply these exact rules to the merged findings list. Do NOT use judgment, interpretation, or override these rules for any reason:
-
-| Condition | Verdict |
-|-----------|---------|
-| Any finding has severity = **CRITICAL** | **REJECT** |
-| No CRITICAL, but any finding has severity = **HIGH** | **REVISE** |
-| No CRITICAL or HIGH, but any finding has severity = **MEDIUM** or **LOW** | **PASS_WITH_NOTES** |
-| No findings at all, or every finding is severity = **INFO** | **PASS** |
-
-The verdict is determined solely by the highest severity in the merged findings list. There is no weighting, no override, no discretion.
-
----
-
-## 8. Report Output
-
-Generate the final report in this exact markdown format. Write it to stdout (display it to the user) and also offer to write it to a file if the user wants persistence.
-
-```markdown
-# Quorum Validation Report
-
-**Target:** {file_path}
-**Verdict:** {PASS | PASS_WITH_NOTES | REVISE | REJECT}
-**Domain:** {code | config | research | docs}
-**Depth:** standard
-**Critics:** {comma-separated list of critics that ran}
-**Date:** {YYYY-MM-DD HH:MM PT}
-
-## Verdict
-
-{verdict_banner}
-
-{one_to_three_sentence_summary_of_why_this_verdict_was_assigned}
-
-## Findings
-
-| # | Severity | Critic | Description | Location |
-|---|----------|--------|-------------|----------|
-{findings_table_rows}
-
-## Coverage Summary
-
-| Critic | Findings | Highest Severity |
-|--------|----------|-----------------|
-{per_critic_summary_rows}
-
-## Pre-Screen Results
-
-| Check | Status | Details |
-|-------|--------|---------|
-{prescreen_results_table_rows}
-```
-
-### Verdict banner format
-
-Use these exact banners:
-
-- **REJECT:** `REJECT — Critical issues found. Do not ship without fixing.`
-- **REVISE:** `REVISE — High-severity issues require attention before delivery.`
-- **PASS_WITH_NOTES:** `PASS WITH NOTES — Minor issues noted. Safe to ship with awareness.`
-- **PASS:** `PASS — No significant issues found. Ship it.`
-
-### Findings table
-
-Number findings sequentially starting at 1. Sort by severity (CRITICAL first, then HIGH, MEDIUM, LOW, INFO). Within the same severity, sort by critic name alphabetically.
-
-If there are no findings, write: "No findings."
-
-### Coverage summary
-
-One row per critic. Show the count of findings and the highest severity finding from that critic. If the critic returned no findings, show `0` and `—`. If the critic failed, show `ERROR` and explain briefly.
-
-### Pre-screen results table
-
-One row per pre-screen check. Show the check ID + name, status (PASS/FAIL/SKIP), and the details string from the pre-screen output. If pre-screen was not available, write: "Pre-screen was not available for this run."
-
----
-
-## 9. Evidence Grounding Rule
-
-This is a CORE requirement that must never be relaxed:
-
-**Every finding must include evidence.** Evidence means at least one of:
-- A direct quote from the artifact (in `evidence_result`)
-- A pre-screen check ID reference (in `evidence_tool`, e.g., "PS-002")
-- A specific line number or section reference with quoted content
-
-If a critic returns a finding where both `evidence_tool` and `evidence_result` are empty or missing, **reject that finding**. Do not include it in the merged findings list or the report. Log that it was rejected in the coverage summary.
-
-Vague findings like "error handling could be improved" without a quoted excerpt are never acceptable.
-
----
-
-## 10. Cross-Artifact Consistency Mode
-
-If the user provides **two files** and asks for cross-consistency validation (e.g., "check if the spec matches the implementation", "validate docs against code"), switch to cross-artifact mode:
-
-1. Still run pre-screen on both files individually.
-2. Instead of the standard 4-critic dispatch, dispatch a single **cross-consistency critic** as a `task` agent.
-3. **Model:** `claude-sonnet-4-20250514` (Tier 2). Set explicitly when dispatching. **Timeout:** 120 seconds. **Max tokens:** 4096. **Error handling:** Same as inline critics in section 4 — on context overflow, note partial evaluation; on failure, return a structured INFO finding recommending manual review.
-4. If `critics/cross-consistency.agent.md` exists, use its system prompt. Otherwise, use this inline prompt:
-
-> You are the Cross-Consistency Critic for Quorum, a rigorous quality validation system.
->
-> Your role: Evaluate the relationship between two artifacts for consistency, completeness of implementation, and specification adherence.
->
-> Your specific focus areas:
-> 1. **Spec-to-implementation gaps** — Features specified but not implemented, or implemented but not specified.
-> 2. **Behavioral contradictions** — The implementation behaves differently from what the spec/docs describe.
-> 3. **Interface mismatches** — Function signatures, parameter names, return types, or API contracts that differ between artifacts.
-> 4. **Terminology drift** — The same concept named differently across artifacts without explicit mapping.
-> 5. **Version skew** — One artifact references features or behaviors that belong to a different version of the other.
->
-> Critical rule: EVERY finding must include direct quotes from BOTH artifacts showing the inconsistency. Findings with evidence from only one artifact will be rejected.
-
-5. The prompt template for cross-consistency includes both artifacts:
-
-```
-## Artifact A (Primary)
-
-<artifact_a>
-{artifact_a_text}
-</artifact_a>
-
-## Artifact B (Secondary)
-
-<artifact_b>
-{artifact_b_text}
-</artifact_b>
-
-## Pre-Screen Evidence (Artifact A)
-
-{prescreen_a_results}
-
-## Pre-Screen Evidence (Artifact B)
-
-{prescreen_b_results}
-
-## Your Task
-
-Evaluate the consistency between Artifact A and Artifact B. For each inconsistency:
-
-1. Assign a severity.
-2. Describe the inconsistency.
-3. Quote the relevant passage from BOTH artifacts.
-4. Specify the location in each artifact.
-
-Respond ONLY with JSON matching the FINDINGS_SCHEMA.
-```
-
-6. Apply the same verdict rules (section 7) and report format (section 8) to the cross-consistency findings.
-
----
-
-## 11. Single-Critic Mode
-
-If the user asks to run a specific critic only (e.g., "run the security critic on this file", "just check correctness"):
-
-1. Classify the artifact (section 1).
-2. Select the rubric (section 2).
-3. Run pre-screen (section 3).
-4. Dispatch ONLY the requested critic (section 4), using its `.agent.md` file or inline prompt.
-5. Collect findings, apply verdict rules, and generate the report as normal.
-
-The report should list only the single critic in the Coverage Summary. All other sections remain the same.
-
----
-
-## 12. Error Handling
-
-Handle these failure modes gracefully:
+## Error Handling
 
 | Failure | Action |
 |---------|--------|
-| Target file not found | Report the error immediately. Do not proceed. |
-| Target file is binary | Report: "Binary files are not supported by Quorum." Do not proceed. |
-| Pre-screen script not found | Warn the user. Proceed without pre-screen data. |
-| Pre-screen script crashes | Log stderr. Proceed without pre-screen data. |
-| Rubric file not found | Warn the user. Proceed with no rubric criteria (critics will still evaluate based on their system prompt). |
-| Critic task agent times out (>120s) | Log the timeout. Include "ERROR: timeout after 120s" in that critic's coverage summary row. Continue with remaining critics. |
-| Critic returns invalid JSON | Attempt to extract findings from the response text. If that fails, log the error and mark the critic as failed in coverage summary. |
-| All critics fail | Report verdict as **PASS** with a prominent warning: "All critics failed. This PASS verdict reflects no evaluation, not confirmed quality. Re-run recommended." |
+| Target not found | Abort: "❌ Target file not found: {path}" |
+| Rubric not found | Abort: "❌ Rubric not found: {name}. Available rubrics: [list names only]" |
+| Rubric JSON malformed | Abort: "❌ Rubric parse error: {name}. Verify JSON syntax." |
+| Critic returns invalid JSON | Treat as critic failure (DEGRADED). Log warning, proceed with remaining critics. |
+| Pre-screen script missing | Warn, continue without pre-screen |
+| Some critics fail/time out | DEGRADED: produce verdict from remaining critics. Apply standard verdict rules to available findings. Tag output with "⚠️ DEGRADED: N of M critics returned." |
+| All but one critic fail | PARTIAL: produce verdict from sole remaining critic. Tag output with "⚠️ PARTIAL." Verdict reflects only that critic's coverage. |
+| All critics fail | Abort: "❌ QUORUM_FAILED: All critics failed" |
+| Finding lacks evidence | Reject finding silently, count in summary |
+| Known issues file corrupted | Warn, continue without learning memory |
+
+---
+
+## File Layout
+
+```
+~/.copilot/skills/quorum/
+├── SKILL.md                     ← This file (orchestration)
+├── quorum-prescreen.py          ← Deterministic pre-screen (stdlib Python)
+├── critics/
+│   ├── correctness.yaml         ← Correctness critic definition
+│   ├── completeness.yaml        ← Completeness critic definition
+│   ├── security.yaml            ← Security critic definition
+│   └── code_hygiene.yaml        ← Code hygiene critic definition
+├── rubrics/
+│   ├── python-code.json         ← Python code quality rubric
+│   ├── documentation.json       ← Documentation quality rubric
+│   ├── agent-config.json        ← Agent config rubric
+│   └── research-synthesis.json  ← Research synthesis rubric
+├── learning/
+│   └── known_issues.json        ← Accumulated patterns (grows over time)
+└── verdict-rules.yaml           ← Deterministic verdict logic
+```
+
+### Installation
+
+```bash
+git clone https://github.com/SharedIntellect/quorum-copilot-skill
+cp -r quorum-copilot-skill ~/.copilot/skills/quorum
+# Done. No API keys. No SDK. No approval process.
+```
+
+---
+
+## What This Is (and Isn't)
+
+**This is** a multi-critic validation skill that catches real issues in code, documentation, and configurations. It enforces evidence grounding — every claim must be backed by a direct quote from the artifact.
+
+**This is not** the full Quorum reference implementation. The CLI version has additional capabilities (batch processing, fix loops, cost tracking, tester verification). This skill covers the highest-value portion: deterministic pre-screen → parallel critic dispatch → evidence-grounded findings → deterministic verdict.
+
+**Capability coverage:** ~75% of reference implementation. Includes all four core evaluation critics. Not yet ported: L1/L2 verification, automated remediation, batch mode, cost tracking, structured output artifacts. These are planned for future releases.

@@ -1,0 +1,380 @@
+# Quorum Security Critic — Portable Definition
+# Source: reference-implementation/quorum/critics/security.py
+# Version: 1.0.0
+# Consumers: CLI (Python class), Claude Code (SKILL.md), Copilot (task agent)
+
+name: security
+description: >
+  Framework-grounded security and sensitivity analysis. Applies LLM judgment
+  on top of deterministic pre-screen results. Grounded in OWASP ASVS 5.0,
+  CWE Top 25 (2024), NIST SP 800-53 SA-11, ISO/IEC 25010:2023, and the
+  Quorum Security Critic Framework (SEC-01 through SEC-14).
+
+model_tier: 2  # Sonnet-class for standard depth; Opus for thorough
+
+# ─── SYSTEM PROMPT ───────────────────────────────────────────────────────────
+
+system_prompt: |
+  You are the Security Critic for Quorum, a rigorous quality validation system.
+
+  Your role: Apply framework-grounded security judgment to artifacts — determine
+  what is genuinely risky vs. what is benign.
+
+  ━━━ FRAMEWORK GROUNDING ━━━
+
+  OWASP ASVS 5.0.0 (V1–V17): Primary requirement-level security framework.
+  CWE Top 25 (2024): Prevalence-weighted vulnerability prioritization.
+  NIST SP 800-53 SA-11: Compliance vocabulary (SA-11(1) static, SA-11(3) independent,
+    SA-11(4) manual review, SA-11(6) attack surface).
+  ISO/IEC 25010:2023: Confidentiality, Integrity, Non-repudiation, Accountability,
+    Authenticity, Resistance.
+  Quorum Security Critic Framework v1.0: SEC-01 through SEC-14.
+
+  ━━━ DETECTION CAPABILITY ━━━
+
+  You are the LLM layer on top of the deterministic pre-screen (PS-001–PS-010).
+  Focus deepest analysis where SAST is BLIND:
+
+  🔴 LLM-ONLY (no SAST coverage):
+  - Authorization logic, IDOR, privilege escalation (SEC-04)
+  - Authentication bypass paths (SEC-03)
+  - SSRF via user-controlled URLs (SEC-10)
+  - JWT alg=none, signature bypass (SEC-05)
+  - Path traversal in file operations (SEC-08)
+  - LDAP/XPath injection (SEC-01)
+  - Regex catastrophic backtracking / ReDoS (SEC-14)
+  - PowerShell AMSI bypass, download cradles (SEC-01)
+
+  🟡 LLM-HEAVY (SAST weak, LLM adds significant value):
+  - Input validation completeness (SEC-02)
+  - Secrets in log output / exception messages (SEC-07)
+  - Cryptographic context correctness (SEC-06)
+  - Error messages leaking system details (SEC-11)
+
+  🟢 BOTH (SAST strong, LLM adds chained-pattern detection):
+  - Injection — SQL, OS command, code (SEC-01)
+  - Hardcoded credentials (SEC-07)
+  - Deserialization (SEC-09)
+  - SSL/TLS verification bypass (SEC-03/SEC-06)
+
+  ━━━ EVIDENCE RULES ━━━
+
+  EVERY finding must include ONE of:
+  - A direct quote from the artifact showing the specific problematic text
+  - A pre-screen check ID (e.g. [PS-001]) confirming the finding
+
+  If you cannot quote the artifact or cite a pre-screen check, do not report it.
+
+  ━━━ SEVERITY GUIDE ━━━
+
+  CRITICAL: Live credentials, exploitable injection, active private keys;
+            CWE Top 25 top-10 with direct exploitability
+  HIGH: Auth/authz bypass, IDOR, SSRF, JWT alg=none; CWE Top 25 #11–25;
+        confirmed sensitive data exposure
+  MEDIUM: Indirect vulnerability requiring conditions; info disclosure;
+          ASVS L2 requirement failure
+  LOW: Defense-in-depth; config hardening; unpinned deps; logging adequacy
+  INFO: Observations worth noting but not blocking
+
+  ━━━ DO NOT ━━━
+  - Re-run pattern matching the pre-screen already did
+  - Flag things as sensitive without grounding in artifact text
+  - Invent quotes — only cite verbatim text
+  - Flag CWE memory-safety issues (C/C++ domain; Python/PowerShell are GC'd)
+
+# ─── EVALUATION CATEGORIES ───────────────────────────────────────────────────
+
+categories:
+  # Tier 1 — Must Evaluate (every artifact)
+  - id: SEC-04
+    name: Authorization & Access Control
+    tier: 1
+    description: >
+      Sensitive operations without identity checks, IDOR patterns, horizontal/vertical
+      privilege escalation. SAST-blind — highest LLM value.
+    frameworks: ["CWE-862", "CWE-863", "ASVS V8", "SA-11(4)"]
+
+  - id: SEC-03
+    name: Authentication
+    tier: 1
+    description: >
+      Credential handling, bypass paths (conditional auth skipping, debug-mode disable),
+      hardcoded credentials.
+    frameworks: ["CWE-287", "CWE-306", "CWE-798", "ASVS V6", "SA-11(4)"]
+
+  - id: SEC-01
+    name: Injection
+    tier: 1
+    description: >
+      SQL, OS command, code, LDAP, XPath injection. Direct injection AND indirect —
+      taint across function boundaries, multi-step query construction, PowerShell
+      pipeline injection.
+    frameworks: ["CWE-89", "CWE-78", "CWE-94", "ASVS V1–V2", "SA-11(4)"]
+
+  - id: SEC-07
+    name: Secrets & Credential Handling
+    tier: 1
+    description: >
+      Beyond hardcoded (pre-screen catches that): secrets in log output, exception
+      messages, URL query parameters, env var fallback defaults.
+    frameworks: ["CWE-798", "CWE-200", "ASVS V13", "SA-11(4)"]
+
+  - id: SEC-11
+    name: Error Handling & Information Disclosure
+    tier: 1
+    description: >
+      Stack traces returned to callers, user-distinguishing error messages, debug
+      mode enabled, verbose errors leaking system details.
+    frameworks: ["CWE-200", "CWE-203", "CWE-209", "ASVS V16.1.*", "SA-11(4)"]
+
+  # Tier 2 — Should Evaluate (standard depth)
+  - id: SEC-06
+    name: Cryptography
+    tier: 2
+    description: >
+      Algorithm correctness for context, IV/nonce reuse, key derivation functions,
+      CSPRNG usage.
+    frameworks: ["CWE-327", "CWE-328", "CWE-330", "ASVS V11"]
+
+  - id: SEC-09
+    name: Deserialization
+    tier: 2
+    description: >
+      pickle/yaml from untrusted sources, jsonpickle, PowerShell Import-CliXml
+      from network sources.
+    frameworks: ["CWE-502", "ASVS V2", "ASVS V15"]
+
+  - id: SEC-10
+    name: SSRF
+    tier: 2
+    description: >
+      User-controlled URLs in HTTP client calls, missing allowlisting, cloud
+      metadata endpoint access not blocked.
+    frameworks: ["CWE-918", "ASVS V4.2.*", "SA-11(4)"]
+
+  - id: SEC-08
+    name: Path Traversal & File Handling
+    tier: 2
+    description: >
+      User input in file paths without canonicalization, zipfile.extractall()
+      without member validation, file uploads without extension allowlisting.
+    frameworks: ["CWE-22", "CWE-434", "ASVS V5"]
+
+  - id: SEC-05
+    name: Session & Token Management
+    tier: 2
+    description: >
+      JWT alg=none, signature bypass, missing expiry validation, weak HMAC secret,
+      CSRF protection, cookie security attributes.
+    frameworks: ["CWE-347", "ASVS V9.2.*", "SA-11(4)"]
+
+  - id: SEC-02
+    name: Input Validation & Sanitization
+    tier: 2
+    description: >
+      Whitelist vs. blacklist, type coercion without validation, business logic
+      bounds, encoding/decoding correctness.
+    frameworks: ["CWE-20", "ASVS V2"]
+
+  - id: SEC-13
+    name: Dependency & Supply Chain
+    tier: 2
+    description: >
+      Unpinned dependencies, dangerous libraries (pycrypto, yaml.load without
+      SafeLoader), dynamic code loading, non-standard registries.
+    frameworks: ["ASVS V15.5.*", "SA-11(2)"]
+
+  # Tier 3 — Deep Analysis (thorough depth)
+  - id: SEC-12
+    name: Security Logging & Audit
+    tier: 3
+    description: >
+      Auth events logged, authorization failures logged, log injection prevention,
+      sensitive data in logs, log integrity.
+    frameworks: ["CWE-117", "CWE-778", "CWE-532", "ASVS V16"]
+
+  - id: SEC-14
+    name: Resource Consumption & DoS
+    tier: 3
+    description: >
+      ReDoS patterns, unbounded data loading, missing rate limits, missing timeouts,
+      zip/decompression bomb detection.
+    frameworks: ["CWE-400", "CWE-1088", "ASVS V4.4.*"]
+
+# ─── PRE-SCREEN INTEGRATION ─────────────────────────────────────────────────
+# How this critic interacts with deterministic pre-screen results.
+
+prescreen_integration:
+  description: >
+    The pre-screen (PS-001–PS-010) runs before this critic. Its results are
+    injected as Additional Context. This critic adds judgment — upgrading
+    confirmed risks and downgrading false positives.
+  check_mapping:
+    PS-001: { relates_to: [SEC-08, SEC-11], action: "Determine if flagged paths are genuine risks or documentation examples" }
+    PS-002: { relates_to: [SEC-07], action: "Determine if flagged credentials are live or placeholders" }
+    PS-003: { relates_to: [SEC-07, SEC-11], action: "Determine if flagged PII is real or synthetic test data" }
+  rules:
+    - "FAIL checks are pre-verified — add judgment on genuine risk vs false positive"
+    - "PASS checks are confirmed clean — do NOT re-flag"
+    - "SKIP checks are not applicable — ignore"
+
+# ─── PROMPT TEMPLATE ─────────────────────────────────────────────────────────
+
+prompt_template: |
+  ## Artifact Under Review
+
+  ```
+  {ARTIFACT_TEXT}
+  ```
+
+  ## Rubric: {RUBRIC_NAME} (v{RUBRIC_VERSION})
+
+  Domain: {RUBRIC_DOMAIN}
+
+  ### Security-Relevant Criteria
+  {CRITERIA_TEXT}
+
+  ## Pre-Screen Evidence
+
+  {PRESCREEN_EVIDENCE}
+
+  {EXTRA_CONTEXT}
+
+  ## Your Task
+
+  Evaluate the artifact for security issues using the tiered model:
+
+  **Tier 1 (always evaluate):** Authorization (SEC-04), Authentication (SEC-03),
+  Injection (SEC-01), Secrets (SEC-07), Info Disclosure (SEC-11), Context-aware
+  sensitivity assessment of pre-screen findings.
+
+  **Tier 2 (standard+ depth):** Cryptography (SEC-06), Deserialization (SEC-09),
+  SSRF (SEC-10), Path Traversal (SEC-08), JWT/Tokens (SEC-05), Input Validation
+  (SEC-02), Supply Chain (SEC-13), Proprietary Content, Prompt Injection.
+
+  **Tier 3 (thorough depth):** Security Logging (SEC-12), Resource/DoS (SEC-14),
+  PowerShell-specific deep patterns.
+
+  For each finding:
+  1. Quote the specific artifact text OR cite the pre-screen check ID
+  2. Explain the security concern, citing the relevant SEC category
+  3. State why this is genuine risk (or why a pre-screen finding is benign)
+  4. Identify the rubric criterion it relates to (if any)
+  5. Assign severity: CRITICAL / HIGH / MEDIUM / LOW / INFO
+  6. Include framework references:
+       - ASVS 5.0.0 §[section]: [Requirement]
+       - CWE-[ID]: [Name]
+       - NIST SP 800-53 SA-11([1|3|4|6])
+       - Detection Method: [SAST pre-screen | LLM semantic analysis | Both]
+
+  Return empty findings list if artifact has no security issues.
+
+# ─── RUBRIC KEYWORD FILTER ───────────────────────────────────────────────────
+
+rubric_keywords:
+  - security
+  - sensitive
+  - credential
+  - secret
+  - private
+  - internal
+  - disclosure
+  - injection
+  - sanitiz
+  - auth
+  - token
+  - key
+  - password
+  - pii
+  - personal
+  - boundary
+  - external
+  - public
+  - dependency
+  - supply
+  - chain
+  - sql
+  - command
+  - traversal
+  - path
+  - deserializ
+  - encrypt
+  - crypto
+  - cipher
+  - hash
+  - algorithm
+  - authori
+  - privilege
+  - access control
+  - permission
+  - session
+  - cookie
+  - csrf
+  - jwt
+  - ssrf
+  - idor
+  - rate limit
+  - resource
+  - logging
+  - audit
+  - error
+  - exception
+  - stack trace
+  - debug
+
+# ─── DELEGATION BOUNDARY ─────────────────────────────────────────────────────
+# Other critics that interact with this one.
+
+delegation:
+  receives_from:
+    - critic: code_hygiene
+      patterns: ["eval/exec usage", "Invoke-Expression", "hardcoded credentials", "prompt injection vectors"]
+      note: >
+        Code Hygiene flags these patterns for traceability and delegates
+        security severity assessment to this critic. This critic assigns
+        the authoritative severity and remediation.
+
+# ─── OUTPUT SCHEMA ───────────────────────────────────────────────────────────
+
+output_schema:
+  type: object
+  required: [findings]
+  properties:
+    findings:
+      type: array
+      items:
+        type: object
+        required: [severity, description, evidence_tool, evidence_result]
+        properties:
+          severity:
+            type: string
+            enum: [CRITICAL, HIGH, MEDIUM, LOW, INFO]
+          description:
+            type: string
+          evidence_tool:
+            type: string
+            description: "How verified: grep, schema, read, analysis, pre-screen"
+          evidence_result:
+            type: string
+            description: "Actual excerpt or output proving this finding"
+          location:
+            type: string
+            description: "Where in the artifact (section, line, key path)"
+          rubric_criterion:
+            type: string
+            description: "Rubric criterion ID this finding addresses"
+          framework_references:
+            type: object
+            properties:
+              asvs:
+                type: string
+                description: "ASVS 5.0.0 section reference"
+              cwe:
+                type: string
+                description: "CWE ID and name"
+              nist:
+                type: string
+                description: "NIST SP 800-53 SA-11 sub-control"
+              detection_method:
+                type: string
+                enum: [sast_prescreen, llm_semantic, both]

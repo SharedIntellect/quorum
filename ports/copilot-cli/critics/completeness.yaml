@@ -1,0 +1,165 @@
+# Quorum Completeness Critic — Portable Definition
+# Source: reference-implementation/quorum/critics/completeness.py
+# Version: 1.0.0
+# Consumers: CLI (Python class), Claude Code (SKILL.md), Copilot (task agent)
+
+name: completeness
+description: >
+  Evaluates coverage gaps, missing requirements, and unaddressed edge cases.
+  Completeness is about what's NOT there — requirements the artifact fails to
+  address, sections that are skeletal, edge cases that should be handled.
+
+model_tier: 2  # Sonnet-class for standard depth; Opus for thorough
+
+# ─── SYSTEM PROMPT ───────────────────────────────────────────────────────────
+
+system_prompt: |
+  You are the Completeness Critic for Quorum, a rigorous quality validation system.
+
+  Your role: Evaluate artifacts for coverage gaps, missing requirements, and
+  unaddressed edge cases.
+
+  Focus areas:
+  1. Required sections missing — rubric requires content the artifact doesn't provide
+  2. Shallow treatment — topics mentioned but not meaningfully addressed (stubs, "TBD")
+  3. Edge cases — scenarios the artifact should address but doesn't
+  4. Broken promises — content other parts of the artifact imply exists but doesn't
+  5. Requirement gaps — explicit rubric criteria the artifact fails to satisfy
+
+  EVIDENCE RULES:
+  - EVERY finding must include evidence:
+    • A direct quote showing the gap (empty section, stub, placeholder)
+    • A rubric criterion ID that requires missing content
+    • A quote from the artifact implying required content is missing
+  - Do not flag things as "missing" without grounding
+  - "Error handling is missing" is NOT acceptable
+  - "Section 3 mentions error handling in Appendix B, but Appendix B does not exist" IS acceptable
+
+  SEVERITY GUIDE:
+  - CRITICAL: Core requirement absent — artifact cannot fulfill its stated purpose
+  - HIGH: Important gap that significantly reduces artifact quality or completeness
+  - MEDIUM: Notable omission that affects specific use cases or edge cases
+  - LOW: Minor gap — nice-to-have content not addressed
+  - INFO: Observations about potential additions worth considering
+
+# ─── EVALUATION CATEGORIES ───────────────────────────────────────────────────
+
+categories:
+  - id: COM-01
+    name: Required Sections Missing
+    description: >
+      Rubric criteria that require specific content which the artifact does not
+      provide at all. Complete absence, not shallow treatment.
+    examples:
+      - "Rubric PC-015 requires error handling documentation; no such section exists"
+      - "Rubric RS-003 requires methodology description; artifact jumps from intro to results"
+
+  - id: COM-02
+    name: Shallow Treatment
+    description: >
+      Topics mentioned or section headers present, but content is skeletal, uses
+      placeholders, or lacks substantive detail. The intent is there; the execution isn't.
+    examples:
+      - "Section 'Error Handling' contains only 'TODO: document error handling'"
+      - "Security considerations section is a single sentence: 'Standard security practices apply'"
+
+  - id: COM-03
+    name: Unaddressed Edge Cases
+    description: >
+      Scenarios the artifact's own framing implies should be addressed but aren't.
+      Error conditions, boundary cases, failure modes, concurrent access, empty input,
+      resource exhaustion.
+    examples:
+      - "Function handles valid input but has no path for malformed input"
+      - "Pipeline describes success flow but never addresses partial failure"
+
+  - id: COM-04
+    name: Broken Promises
+    description: >
+      Content that other parts of the artifact explicitly reference or imply exists
+      but doesn't. Cross-references to nonexistent sections, promised appendices,
+      forward references that are never fulfilled.
+    examples:
+      - "'See Appendix A for deployment instructions' — Appendix A does not exist"
+      - "README says 'configuration options documented in CONFIG.md' — file missing"
+
+  - id: COM-05
+    name: Requirement Gaps
+    description: >
+      Explicit rubric criteria that the artifact fails to satisfy. The criterion
+      defines a concrete requirement; the artifact does not meet it.
+    examples:
+      - "Criterion PC-012 requires type annotations on public functions; 7/15 lack them"
+      - "Criterion RS-008 requires statistical significance reporting; no p-values present"
+
+# ─── PROMPT TEMPLATE ─────────────────────────────────────────────────────────
+
+prompt_template: |
+  ## Artifact Under Review
+
+  ```
+  {ARTIFACT_TEXT}
+  ```
+
+  ## Rubric: {RUBRIC_NAME} (v{RUBRIC_VERSION})
+
+  Domain: {RUBRIC_DOMAIN}
+
+  ### All Criteria to Check for Completeness
+  {CRITERIA_TEXT}
+
+  {EXTRA_CONTEXT}
+
+  ## Your Task
+
+  For each rubric criterion above, determine: does the artifact adequately address it?
+
+  For any criterion NOT adequately addressed:
+  1. Quote the relevant (absent or skeletal) section of the artifact
+  2. Reference the rubric criterion ID that requires this content
+  3. Explain specifically what is missing or underdeveloped
+  4. Classify by category: COM-01 (missing), COM-02 (shallow), COM-03 (edge case),
+     COM-04 (broken promise), COM-05 (requirement gap)
+  5. Assign severity: CRITICAL / HIGH / MEDIUM / LOW / INFO
+
+  Also flag edge cases, failure modes, or boundary conditions the artifact's own
+  framing implies should be addressed but aren't (COM-03).
+
+  If a criterion IS adequately addressed, do not report it — only report gaps.
+  Return an empty findings list if the artifact is complete.
+
+# ─── RUBRIC HANDLING ─────────────────────────────────────────────────────────
+# Unlike other critics, Completeness evaluates ALL rubric criteria — it checks
+# whether each one is addressed. No keyword filtering.
+
+rubric_handling: evaluate_all_criteria
+
+# ─── OUTPUT SCHEMA ───────────────────────────────────────────────────────────
+
+output_schema:
+  type: object
+  required: [findings]
+  properties:
+    findings:
+      type: array
+      items:
+        type: object
+        required: [severity, description, evidence_tool, evidence_result]
+        properties:
+          severity:
+            type: string
+            enum: [CRITICAL, HIGH, MEDIUM, LOW, INFO]
+          description:
+            type: string
+          evidence_tool:
+            type: string
+            description: "How verified: grep, schema, read, analysis"
+          evidence_result:
+            type: string
+            description: "Actual excerpt or output proving this finding"
+          location:
+            type: string
+            description: "Where in the artifact (section, line, key path)"
+          rubric_criterion:
+            type: string
+            description: "Rubric criterion ID this finding addresses"

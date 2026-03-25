@@ -1,0 +1,192 @@
+# Quorum Correctness Critic — Portable Definition
+# Source: reference-implementation/quorum/critics/correctness.py
+# Version: 1.0.0
+# Consumers: CLI (Python class), Claude Code (SKILL.md), Copilot (task agent)
+
+name: correctness
+description: >
+  Evaluates artifacts for factual accuracy, logical consistency, and internal
+  contradictions. Catches claims that conflict with each other, unsupported
+  reasoning leaps, and reference inaccuracies.
+
+model_tier: 2  # Sonnet-class for standard depth; Opus for thorough
+
+# ─── SYSTEM PROMPT ───────────────────────────────────────────────────────────
+# The critic's identity and operating constraints. Injected as the system
+# message (or equivalent preamble) before the evaluation prompt.
+
+system_prompt: |
+  You are the Correctness Critic for Quorum, a rigorous quality validation system.
+
+  Your role: Evaluate artifacts for factual accuracy, logical consistency, and
+  internal contradictions.
+
+  Focus areas:
+  1. Internal contradictions — statements in one section incompatible with another
+  2. Logical consistency — conclusions follow from premises; no non-sequiturs
+  3. Factual claims — stated facts are plausible and internally coherent
+  4. Reference accuracy — citations, names, and figures are internally consistent
+  5. Terminology consistency — same concept not described by conflicting terms
+
+  EVIDENCE RULES:
+  - EVERY finding must include a direct quote or specific excerpt from the artifact
+  - If you cannot quote the artifact to support a finding, do not report it
+  - Vague claims like "this section is unclear" without evidence will be rejected
+  - Do not invent quotes — only cite text that appears verbatim in the artifact
+
+  SEVERITY GUIDE:
+  - CRITICAL: Fatal factual error or logical contradiction that invalidates core claims
+  - HIGH: Significant inconsistency or unsupported claim affecting key conclusions
+  - MEDIUM: Notable inconsistency or questionable reasoning in non-critical sections
+  - LOW: Minor terminology drift or cosmetic inconsistency
+  - INFO: Observations worth noting but not blocking
+
+# ─── EVALUATION CATEGORIES ───────────────────────────────────────────────────
+# Structured breakdown of what this critic evaluates. Ports use these to
+# construct evaluation prompts appropriate to their platform.
+
+categories:
+  - id: COR-01
+    name: Internal Contradictions
+    description: >
+      Statements in one section that are incompatible with statements in another.
+      Includes numerical inconsistencies, conflicting claims about the same entity,
+      and self-contradicting logic.
+    examples:
+      - "Section 2 states the timeout is 30 seconds; Section 5 configures it as 60"
+      - "Abstract claims 99% accuracy; Results section reports 94%"
+
+  - id: COR-02
+    name: Logical Consistency
+    description: >
+      Conclusions must follow from premises. Flag non-sequiturs, unsupported leaps,
+      circular reasoning, and arguments where the conclusion doesn't follow from
+      the evidence presented.
+    examples:
+      - "Claims system is production-ready based solely on unit test pass rate"
+      - "Concludes X is impossible but earlier demonstrates X working"
+
+  - id: COR-03
+    name: Factual Claims
+    description: >
+      Stated facts that are internally incoherent or implausible given the artifact's
+      own context. This critic does NOT verify external facts — it checks whether
+      claims are consistent with each other and with the artifact's own evidence.
+    examples:
+      - "Claims to support 10 file types but only lists 7 in the implementation"
+      - "States 'all tests pass' but test output shows 3 failures"
+
+  - id: COR-04
+    name: Reference Accuracy
+    description: >
+      Citations, cross-references, figure numbers, section references, and quoted
+      values must be internally consistent. Includes: references to nonexistent
+      sections, incorrect figure numbers, misquoted values from other parts of
+      the artifact.
+    examples:
+      - "References 'Section 4.3' which does not exist"
+      - "Cites 'Table 2' but the table shows different data than described"
+
+  - id: COR-05
+    name: Terminology Consistency
+    description: >
+      The same concept should be described with consistent terminology throughout.
+      Flag cases where different terms are used interchangeably without explicit
+      acknowledgment, creating ambiguity about whether they refer to the same thing.
+    examples:
+      - "Uses 'finding', 'issue', and 'defect' interchangeably without definition"
+      - "Section 1 calls it 'evidence grounding'; Section 4 calls it 'citation verification'"
+
+# ─── PROMPT TEMPLATE ─────────────────────────────────────────────────────────
+# The evaluation prompt injected as the user message. Variables are denoted
+# with {VARIABLE_NAME} and must be resolved by the port's orchestrator.
+#
+# Required variables:
+#   {ARTIFACT_TEXT}  — full text of the artifact under review
+#   {RUBRIC_NAME}    — human-readable rubric name
+#   {RUBRIC_VERSION} — rubric semver
+#   {RUBRIC_DOMAIN}  — rubric domain tag
+#   {CRITERIA_TEXT}   — formatted rubric criteria (port-specific formatting)
+#   {EXTRA_CONTEXT}  — optional additional context (known issues, pre-screen results)
+
+prompt_template: |
+  ## Artifact Under Review
+
+  ```
+  {ARTIFACT_TEXT}
+  ```
+
+  ## Rubric: {RUBRIC_NAME} (v{RUBRIC_VERSION})
+
+  Domain: {RUBRIC_DOMAIN}
+
+  ### Criteria to Evaluate
+  {CRITERIA_TEXT}
+
+  {EXTRA_CONTEXT}
+
+  ## Your Task
+
+  Review the artifact for correctness issues across these categories:
+  - COR-01: Internal contradictions
+  - COR-02: Logical consistency
+  - COR-03: Factual claims (internal coherence)
+  - COR-04: Reference accuracy
+  - COR-05: Terminology consistency
+
+  For each finding:
+  1. Quote the specific text from the artifact that is problematic
+  2. Explain the correctness violation clearly
+  3. Identify which rubric criterion it violates (if any)
+  4. Assign severity: CRITICAL / HIGH / MEDIUM / LOW / INFO
+
+  If the artifact is entirely correct, return an empty findings list.
+  Only report findings you can back up with direct quotes from the artifact.
+
+# ─── RUBRIC KEYWORD FILTER ───────────────────────────────────────────────────
+# When a rubric has more criteria than this critic needs, filter by these
+# keywords (matched against criterion text, case-insensitive). If no criteria
+# match, fall back to evaluating all criteria.
+
+rubric_keywords:
+  - accurate
+  - correct
+  - consistent
+  - factual
+  - logical
+  - contradict
+  - valid
+  - truth
+  - claim
+  - support
+
+# ─── OUTPUT SCHEMA ───────────────────────────────────────────────────────────
+# The structured output format critics must return. All ports enforce this.
+
+output_schema:
+  type: object
+  required: [findings]
+  properties:
+    findings:
+      type: array
+      items:
+        type: object
+        required: [severity, description, evidence_tool, evidence_result]
+        properties:
+          severity:
+            type: string
+            enum: [CRITICAL, HIGH, MEDIUM, LOW, INFO]
+          description:
+            type: string
+          evidence_tool:
+            type: string
+            description: "How verified: grep, schema, read, analysis"
+          evidence_result:
+            type: string
+            description: "Actual excerpt or output proving this finding"
+          location:
+            type: string
+            description: "Where in the artifact (section, line, key path)"
+          rubric_criterion:
+            type: string
+            description: "Rubric criterion ID this finding addresses"

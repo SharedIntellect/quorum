@@ -1,0 +1,444 @@
+# Quorum Code Hygiene Critic — Portable Definition
+# Source: reference-implementation/quorum/critics/code_hygiene.py
+# Version: 1.0.0
+# Consumers: CLI (Python class), Claude Code (SKILL.md), Copilot (task agent)
+
+name: code_hygiene
+description: >
+  Structural quality, maintainability, and reliability analysis. The LLM judgment
+  layer on top of deterministic pre-screen checks (PS-001–PS-010). Evaluates issues
+  that static analysis cannot reliably assess from syntax alone. Primary quality
+  models: ISO/IEC 25010:2023 (Maintainability + Reliability) and ISO/IEC 5055:2021
+  (CISQ ASCMM/ASCRM CWE mappings).
+
+model_tier: 2  # Sonnet-class for standard depth; Opus for thorough
+
+# ─── DELEGATION BOUNDARY ─────────────────────────────────────────────────────
+# This critic flags security-adjacent patterns for traceability and DELEGATES
+# security severity assessment to the Security Critic. It does NOT assign
+# HIGH/CRITICAL to these patterns — that is Security Critic's domain.
+
+delegation:
+  delegates_to:
+    - critic: security
+      patterns:
+        - "eval()/exec()/__import__() with external input"
+        - "Invoke-Expression in PowerShell"
+        - "Hardcoded credential literals"
+        - "Unsanitized user input in prompt construction (AP-01)"
+      finding_template: >
+        Code hygiene concern: {pattern} is difficult to audit and test.
+        Security severity and exploitability assessment delegated to Security Critic.
+      max_severity_from_this_critic: MEDIUM
+
+# ─── SYSTEM PROMPT ───────────────────────────────────────────────────────────
+
+system_prompt: |
+  You are the Code Hygiene Critic for Quorum, a rigorous multi-critic quality
+  validation system.
+
+  Your role: Evaluate source code for structural quality issues that require LLM
+  semantic judgment — things that static analysis tools CANNOT reliably catch
+  from syntax alone.
+
+  You are the LLM layer on top of the deterministic pre-screen (PS-001–PS-010).
+  Do NOT re-run pattern matching the pre-screen already performed. Your job is
+  semantic and design-quality judgment.
+
+  ━━━ PRIMARY QUALITY MODELS ━━━
+
+  ISO/IEC 25010:2023 — Maintainability and Reliability:
+    Maintainability: Modularity, Reusability, Analysability, Modifiability, Testability
+    Reliability: Faultlessness, Fault Tolerance, Availability, Recoverability
+
+  ISO/IEC 5055:2021 (CISQ) — CWE mappings:
+    Reliability (ASCRM): CWE-252, CWE-390, CWE-391, CWE-703, CWE-404, CWE-662, CWE-833
+    Maintainability (ASCMM): CWE-1041, CWE-1047, CWE-1048, CWE-1052, CWE-1064,
+      CWE-1080, CWE-1083, CWE-1085, CWE-1121
+
+  ━━━ DELEGATION BOUNDARY ━━━
+
+  When you detect eval()/exec(), Invoke-Expression, hardcoded credentials, or
+  unsanitized user input in prompts: flag the code hygiene concern (hard to audit,
+  hard to test) and explicitly state security assessment is delegated to the
+  Security Critic. Assign LOW or MEDIUM severity only from this critic.
+
+  ━━━ EVIDENCE RULES ━━━
+
+  EVERY finding must include ONE of:
+  - A direct code excerpt from the artifact showing the problematic code
+  - A pre-screen check ID (e.g. [PS-007]) that pre-verified the issue
+
+  If you cannot quote the artifact or cite a pre-screen check, do not report it.
+
+  ━━━ SEVERITY GUIDE ━━━
+
+  CRITICAL: Bug causing runtime failure, data corruption, or system hang in common usage
+  HIGH: Logic error, exception swallowing, resource leak, race condition with high impact
+  MEDIUM: Incomplete handling, maintainability-reducing complexity, missing error context
+  LOW: Naming clarity, near-duplicate code, minor testability concerns
+  INFO: Style organization, optional documentation improvements
+
+  ━━━ DO NOT ━━━
+  - Re-flag PASSED pre-screen checks
+  - Report auto-fixable formatting issues (indentation, line length, whitespace)
+  - Assign security severity to credential/injection patterns — delegate to Security Critic
+  - Invent code quotes — only cite text that appears verbatim in the artifact
+  - Flag the same issue in multiple findings
+
+# ─── EVALUATION CATEGORIES ───────────────────────────────────────────────────
+
+categories:
+  # Core quality categories (ISO 25010 + CISQ mapped)
+  - id: CAT-01
+    name: Code Correctness
+    iso_mapping: "Reliability → Faultlessness"
+    cisq_cwes: ["CWE-252", "CWE-480", "CWE-682"]
+    description: >
+      Issues SAST cannot catch: off-by-one errors in range/index/boundary logic,
+      wrong algorithm producing wrong results, unreachable branches that are
+      logically impossible but syntactically valid, incorrect comparison semantics,
+      closure variable capture in loop bodies.
+
+  - id: CAT-02
+    name: Error Handling
+    iso_mapping: "Reliability → Fault Tolerance"
+    cisq_cwes: ["CWE-390", "CWE-391", "CWE-703"]
+    description: >
+      Exception handling completeness — does code handle ALL meaningful failure modes?
+      Appropriate exception granularity, error propagation correctness, recovery logic
+      adequacy. PowerShell: $? fragile flag vs structured try/catch, missing
+      -ErrorAction Stop on cmdlets inside try blocks.
+
+  - id: CAT-03
+    name: Resource Management
+    iso_mapping: "Performance Efficiency → Resource Utilization"
+    cisq_cwes: ["CWE-401", "CWE-404", "CWE-772"]
+    description: >
+      Context manager usage across ALL code paths including exception paths,
+      connection lifecycle completeness, timeout adequacy, unbounded result
+      accumulation in loops, generator vs list opportunity.
+
+  - id: CAT-04
+    name: Complexity & Modularity
+    iso_mapping: "Maintainability → Analysability, Modularity"
+    cisq_cwes: ["CWE-1047", "CWE-1064", "CWE-1083", "CWE-1121"]
+    description: >
+      Cohesion (one thing or many?), inappropriate abstraction, God class/function
+      patterns, semantic layer violations. PowerShell: Export-ModuleMember usage,
+      function decomposition.
+
+  - id: CAT-05
+    name: Code Duplication
+    iso_mapping: "Maintainability → Reusability"
+    cisq_cwes: ["CWE-1041"]
+    description: >
+      Near-duplicate logic with parameter variation (semantic clones, not just
+      exact copies), missed abstraction opportunities, justified vs unjustified
+      duplication.
+
+  - id: CAT-06
+    name: Naming & Documentation
+    iso_mapping: "Maintainability → Analysability"
+    cisq_cwes: ["CWE-1052", "CWE-1085"]
+    description: >
+      Docstring accuracy (not just presence — is it correct?), naming clarity and
+      semantic precision, magic numbers/strings needing named constants, comment
+      quality (WHY not WHAT). PowerShell: ProvideCommentHelp quality beyond presence.
+
+  - id: CAT-07
+    name: Type Safety & Data Integrity
+    iso_mapping: "Reliability → Faultlessness"
+    cisq_cwes: ["CWE-681", "CWE-704"]
+    description: >
+      Type annotation correctness (not just presence), None/Optional propagation
+      gaps, optional chaining adequacy on dicts. PowerShell: type coercion surprises,
+      array vs scalar pipeline behavior.
+
+  - id: CAT-08
+    name: Async & Concurrency
+    iso_mapping: "Reliability → Fault Tolerance"
+    cisq_cwes: ["CWE-366", "CWE-662", "CWE-833"]
+    description: >
+      Async/sync boundary consistency, asyncio.CancelledError propagation (MUST NOT
+      be swallowed by except Exception:), race conditions in shared mutable state,
+      deadlock potential. PowerShell: ForEach-Object -Parallel thread safety.
+
+  - id: CAT-09
+    name: Import & Dependency Hygiene
+    iso_mapping: "Maintainability → Modularity"
+    cisq_cwes: ["CWE-1047", "CWE-1048"]
+    description: >
+      Conditional import justification, dependency necessity, version pinning
+      adequacy. PowerShell: RequiredModules declared with version constraints.
+
+  - id: CAT-10
+    name: Style & Formatting
+    iso_mapping: "Maintainability → Analysability"
+    cisq_cwes: ["CWE-1080"]
+    description: >
+      Logical organization (related functions grouped?), consistent abstraction
+      level within functions. Do NOT flag auto-fixable formatting — only semantic
+      organization issues.
+
+  - id: CAT-11
+    name: Portability & Compatibility
+    iso_mapping: "Flexibility → Adaptability"
+    cisq_cwes: ["CWE-758", "CWE-1051"]
+    description: >
+      Subtle OS assumptions (hardcoded paths, platform-specific APIs without guards),
+      PowerShell Windows vs Linux parity (PS 5.1 vs PS 7 behavior differences),
+      hardcoded configuration (IP addresses, ports, connection strings).
+
+  - id: CAT-12
+    name: Testability
+    iso_mapping: "Maintainability → Testability"
+    cisq_cwes: []
+    description: >
+      Function purity and side effects, dependency injection design, complex logic
+      branches appearing untested, test isolation (hidden deps on global state,
+      filesystem, network), mock adequacy.
+
+  # Agentic code patterns (no ISO mapping — Quorum-specific)
+  - id: AP-01
+    name: Prompt Construction
+    tier: agentic
+    description: >
+      Unsanitized user input in system/user messages, role boundary enforcement,
+      prompt template exfiltration risk, token budget management, structured output
+      schema validation.
+
+  - id: AP-02
+    name: LLM API Call Patterns
+    tier: agentic
+    description: >
+      Retry logic (429, 503 with exponential backoff + jitter), model version pinning,
+      response structure validation before field access, max_tokens set, streaming
+      response cleanup on error.
+
+  - id: AP-03
+    name: Agent Pipeline Errors
+    tier: agentic
+    description: >
+      Partial success handling, structured error returns vs exceptions consistency,
+      fallback behavior, error context preservation (input, tool name, pipeline stage),
+      asyncio.CancelledError propagation.
+
+  - id: AP-04
+    name: Credential Management
+    tier: agentic
+    description: >
+      Environment variable usage (no plaintext fallback defaults), secrets in log
+      output at any level, secrets in exception messages, .env files excluded from VCS.
+      NOTE: Flag pattern only — delegate security assessment to Security Critic.
+
+  - id: AP-05
+    name: Timeout & Retry Logic
+    tier: agentic
+    description: >
+      Exponential backoff calculation, max retry count, jitter for thundering herd,
+      retry on correct exception types (not logic errors), circuit breaker for
+      high-volume agents, timeout scope completeness.
+
+  - id: AP-06
+    name: Logging & Observability
+    tier: agentic
+    description: >
+      Structured logging for agent decisions, log level appropriateness, correlation
+      IDs in multi-step pipelines, sensitive data in logs, log coverage at failure
+      points.
+
+# ─── PRE-SCREEN INTEGRATION ─────────────────────────────────────────────────
+
+prescreen_integration:
+  description: >
+    The pre-screen (PS-001–PS-010) runs before this critic. FAIL checks are
+    pre-verified — add LLM judgment on semantic impact. PASS checks are confirmed
+    clean — do NOT re-flag. SKIP checks are not applicable.
+  check_mapping:
+    PS-001: { relates_to: [CAT-11, AP-04], action: "Assess semantic impact of hardcoded paths" }
+    PS-002: { relates_to: [AP-04], action: "Flag hygiene concern, delegate security to Security Critic" }
+    PS-003: { relates_to: [AP-04], action: "Flag hygiene concern, delegate security to Security Critic" }
+    PS-006: { relates_to: [CAT-01], action: "Assess semantic impact of syntax issue" }
+    PS-007: { relates_to: [CAT-06], action: "Assess documentation impact of broken links" }
+    PS-008: { relates_to: [CAT-06], action: "Assess whether TODOs indicate incomplete implementation" }
+
+# ─── PROMPT TEMPLATE ─────────────────────────────────────────────────────────
+
+prompt_template: |
+  ## Artifact Under Review
+
+  ```
+  {ARTIFACT_TEXT}
+  ```
+
+  ## Rubric: {RUBRIC_NAME} (v{RUBRIC_VERSION})
+
+  Domain: {RUBRIC_DOMAIN}
+
+  ### Code Hygiene Criteria to Evaluate
+  {CRITERIA_TEXT}
+
+  ## Pre-Screen Evidence
+
+  {PRESCREEN_EVIDENCE}
+
+  {EXTRA_CONTEXT}
+
+  ## Your Task: Semantic Code Hygiene Assessment
+
+  Evaluate the artifact for code quality issues that static analysis CANNOT catch.
+
+  Categories to assess:
+  - CAT-01 (Correctness): Off-by-one, wrong algorithms, unreachable branches
+  - CAT-02 (Error Handling): Exception completeness, granularity, recovery logic
+  - CAT-03 (Resource Management): Context managers across exception paths, timeouts
+  - CAT-04 (Complexity): Cohesion, God class/function, layer violations
+  - CAT-05 (Duplication): Semantic clones, missed abstraction opportunities
+  - CAT-06 (Naming & Docs): Docstring accuracy, naming clarity, magic numbers
+  - CAT-07 (Type Safety): Annotation correctness, None/Optional propagation
+  - CAT-08 (Async): Async/sync boundaries, CancelledError propagation, races
+  - CAT-09 (Import Hygiene): Conditional imports, dependency necessity
+  - CAT-10 (Style): Logical organization, consistent abstraction level
+  - CAT-11 (Portability): OS assumptions, platform-specific APIs, hardcoded config
+  - CAT-12 (Testability): Purity, side effects, injection design
+
+  If agentic code: also assess AP-01 through AP-06 (prompt construction, LLM API
+  hygiene, pipeline errors, credentials, retry logic, observability).
+
+  Delegation: For eval()/exec(), Invoke-Expression, hardcoded credentials, or
+  unsanitized prompt input — flag the hygiene concern and state that security
+  assessment is delegated to Security Critic. Assign LOW/MEDIUM only.
+
+  For each finding:
+  1. Quote the specific code excerpt OR cite pre-screen check ID
+  2. Explain the quality concern — what can go wrong and why it matters
+  3. Reference the applicable category (e.g. CAT-02, AP-03)
+  4. Identify which rubric criterion this finding addresses (if any)
+  5. Assign severity: CRITICAL / HIGH / MEDIUM / LOW / INFO
+
+  Return empty findings list if no hygiene issues found.
+  Do not report auto-fixable formatting issues or re-flag pre-screen PASSED checks.
+
+# ─── RUBRIC KEYWORD FILTER ───────────────────────────────────────────────────
+
+rubric_keywords:
+  # Core correctness / reliability
+  - correct
+  - correctness
+  - logic
+  - error
+  - exception
+  - handling
+  - fault
+  - tolerance
+  - faultless
+  - reliability
+  - robust
+  # Resource / async
+  - resource
+  - async
+  - concurrency
+  - concurrent
+  - thread
+  - lock
+  - timeout
+  - retry
+  - context manager
+  - leak
+  - blocking
+  # Structure / maintainability
+  - complex
+  - complexity
+  - modular
+  - modularity
+  - coupling
+  - cohesion
+  - duplication
+  - duplicate
+  - reuse
+  - reusability
+  # Naming / docs
+  - naming
+  - name
+  - documentation
+  - docstring
+  - comment
+  - readability
+  - analysability
+  - self-descriptive
+  # Type / data
+  - type
+  - typing
+  - annotation
+  - type safety
+  - none
+  - optional
+  # Import / dependency
+  - import
+  - dependency
+  - circular
+  # Style
+  - style
+  - formatting
+  - format
+  # Portability
+  - portable
+  - portability
+  - compatibility
+  - platform
+  # Testability
+  - test
+  - testability
+  - testable
+  - mock
+  - fixture
+  # Agentic
+  - prompt
+  - llm
+  - agent
+  - pipeline
+  - logging
+  - observability
+  - credential
+  - secret
+  - retry
+  - backoff
+  # Catch-all
+  - hygiene
+  - quality
+  - maintainability
+  - maintainable
+
+# ─── OUTPUT SCHEMA ───────────────────────────────────────────────────────────
+
+output_schema:
+  type: object
+  required: [findings]
+  properties:
+    findings:
+      type: array
+      items:
+        type: object
+        required: [severity, description, evidence_tool, evidence_result]
+        properties:
+          severity:
+            type: string
+            enum: [CRITICAL, HIGH, MEDIUM, LOW, INFO]
+          description:
+            type: string
+          evidence_tool:
+            type: string
+            description: "How verified: grep, schema, read, analysis, pre-screen"
+          evidence_result:
+            type: string
+            description: "Actual excerpt or output proving this finding"
+          location:
+            type: string
+            description: "Where in the artifact (section, line, key path)"
+          rubric_criterion:
+            type: string
+            description: "Rubric criterion ID this finding addresses"
+          category:
+            type: string
+            description: "Evaluation category (CAT-01 through CAT-12, AP-01 through AP-06)"
