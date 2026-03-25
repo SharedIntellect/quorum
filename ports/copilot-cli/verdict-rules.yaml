@@ -1,0 +1,60 @@
+# Quorum Verdict Rules — Shared Aggregation Logic
+# Version: 1.0.0
+# These rules are deterministic. Every port applies them identically.
+
+# ─── VERDICT TAXONOMY ────────────────────────────────────────────────────────
+
+verdicts:
+  PASS:
+    description: "No FAIL findings. Artifact meets all evaluated criteria."
+    action: "Ship it."
+
+  PASS_WITH_NOTES:
+    description: "Minor or moderate findings that don't block acceptance."
+    action: "Review notes. Fix at discretion. Safe to proceed."
+
+  REVISE:
+    description: "Significant findings that must be addressed before acceptance."
+    action: "Fix findings. Re-run validation. Do not ship until resolved."
+
+  REJECT:
+    description: "Artifact is fundamentally unsalvageable in current form."
+    action: "Requires rewrite or major restructuring. Supervisor judgment call."
+
+# ─── AGGREGATION RULES ───────────────────────────────────────────────────────
+# Applied in order. First matching rule determines the verdict.
+
+rules:
+  - condition: "Any CRITICAL finding"
+    verdict: REVISE
+
+  - condition: "3 or more HIGH findings"
+    verdict: REVISE
+
+  - condition: "Any HIGH finding (fewer than 3)"
+    verdict: PASS_WITH_NOTES
+
+  - condition: "Only MEDIUM and/or LOW findings"
+    verdict: PASS_WITH_NOTES
+
+  - condition: "No FAIL findings"
+    verdict: PASS
+
+# ─── ESCALATION ──────────────────────────────────────────────────────────────
+# Cross-artifact relationship findings can escalate the verdict by one level.
+
+escalation:
+  trigger: "Cross-artifact relationship critic finds HIGH or CRITICAL"
+  effect: "Escalate verdict by one level: PASS → PASS_WITH_NOTES, PASS_WITH_NOTES → REVISE"
+  note: "REVISE does not escalate to REJECT. REJECT is a supervisor judgment call."
+
+# ─── DEDUPLICATION ───────────────────────────────────────────────────────────
+# When multiple critics report similar findings, deduplicate before aggregation.
+
+deduplication:
+  method: "Similarity threshold on description text"
+  threshold: 0.72
+  conflict_resolution: "Keep highest severity when duplicates conflict"
+  note: >
+    Ports without programmatic dedup should instruct the aggregation prompt
+    to identify and merge duplicate findings, keeping the highest severity.
