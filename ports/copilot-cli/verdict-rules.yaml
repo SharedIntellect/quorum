@@ -37,7 +37,7 @@ rules:
   - condition: "Only MEDIUM and/or LOW findings"
     verdict: PASS_WITH_NOTES
 
-  - condition: "No FAIL findings"
+  - condition: "No findings, or only INFO-severity findings"
     verdict: PASS
 
 # ─── ESCALATION ──────────────────────────────────────────────────────────────

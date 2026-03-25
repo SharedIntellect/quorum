@@ -16,7 +16,7 @@ model_tier: 2  # Sonnet-class for standard depth; Opus for thorough
 # ─── DELEGATION BOUNDARY ─────────────────────────────────────────────────────
 # This critic flags security-adjacent patterns for traceability and DELEGATES
 # security severity assessment to the Security Critic. It does NOT assign
-# HIGH/CRITICAL to these patterns — that is SecurityCritic's domain.
+# HIGH/CRITICAL to these patterns — that is Security Critic's domain.
 
 delegation:
   delegates_to:
@@ -28,7 +28,7 @@ delegation:
         - "Unsanitized user input in prompt construction (AP-01)"
       finding_template: >
         Code hygiene concern: {pattern} is difficult to audit and test.
-        Security severity and exploitability assessment delegated to SecurityCritic.
+        Security severity and exploitability assessment delegated to Security Critic.
       max_severity_from_this_critic: MEDIUM
 
 # ─── SYSTEM PROMPT ───────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ system_prompt: |
   ━━━ DO NOT ━━━
   - Re-flag PASSED pre-screen checks
   - Report auto-fixable formatting issues (indentation, line length, whitespace)
-  - Assign security severity to credential/injection patterns — delegate to SecurityCritic
+  - Assign security severity to credential/injection patterns — delegate to Security Critic
   - Invent code quotes — only cite text that appears verbatim in the artifact
   - Flag the same issue in multiple findings
 
@@ -230,7 +230,7 @@ categories:
     description: >
       Environment variable usage (no plaintext fallback defaults), secrets in log
       output at any level, secrets in exception messages, .env files excluded from VCS.
-      NOTE: Flag pattern only — delegate security assessment to SecurityCritic.
+      NOTE: Flag pattern only — delegate security assessment to Security Critic.
 
   - id: AP-05
     name: Timeout & Retry Logic
@@ -257,8 +257,8 @@ prescreen_integration:
     clean — do NOT re-flag. SKIP checks are not applicable.
   check_mapping:
     PS-001: { relates_to: [CAT-11, AP-04], action: "Assess semantic impact of hardcoded paths" }
-    PS-002: { relates_to: [AP-04], action: "Flag hygiene concern, delegate security to SecurityCritic" }
-    PS-003: { relates_to: [AP-04], action: "Flag hygiene concern, delegate security to SecurityCritic" }
+    PS-002: { relates_to: [AP-04], action: "Flag hygiene concern, delegate security to Security Critic" }
+    PS-003: { relates_to: [AP-04], action: "Flag hygiene concern, delegate security to Security Critic" }
     PS-006: { relates_to: [CAT-01], action: "Assess semantic impact of syntax issue" }
     PS-007: { relates_to: [CAT-06], action: "Assess documentation impact of broken links" }
     PS-008: { relates_to: [CAT-06], action: "Assess whether TODOs indicate incomplete implementation" }
@@ -308,7 +308,7 @@ prompt_template: |
 
   Delegation: For eval()/exec(), Invoke-Expression, hardcoded credentials, or
   unsanitized prompt input — flag the hygiene concern and state that security
-  assessment is delegated to SecurityCritic. Assign LOW/MEDIUM only.
+  assessment is delegated to Security Critic. Assign LOW/MEDIUM only.
 
   For each finding:
   1. Quote the specific code excerpt OR cite pre-screen check ID

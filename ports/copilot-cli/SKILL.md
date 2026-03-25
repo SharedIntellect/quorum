@@ -13,7 +13,7 @@ USER INVOCATION → Parse parameters
   │
   ├─ PRE-SCREEN: Run quorum-prescreen.py (deterministic, <5s)
   │
-  ├─ CRITIC DISPATCH (parallel task agents):
+  ├─ CRITIC DISPATCH (task agents, sequential by default):
   │    ├─ Correctness Critic → factual accuracy, logical consistency
   │    ├─ Completeness Critic → coverage gaps, missing requirements
   │    ├─ Security Critic → framework-grounded security analysis
@@ -32,8 +32,9 @@ USER INVOCATION → Parse parameters
 |-----------|----------|---------|-------------|
 | `TARGET` | Yes | — | Path to the artifact to validate |
 | `RUBRIC` | No | Auto-detect from file extension | Rubric name or path to rubric JSON |
-| `DEPTH` | No | `standard` | `quick` (1 critic) / `standard` (3 critics) / `thorough` (3 + learning review) |
-| `RELATIONSHIPS` | No | — | Path to `quorum-relationships.yaml` for cross-artifact checks |
+| `DEPTH` | No | `standard` | `quick` / `standard` / `thorough` (see Depth Profiles below) |
+| `RELATIONSHIPS` | No | — | Path to `quorum-relationships.yaml` for cross-artifact checks (not yet ported; reserved for future use) |
+| `--dispatch` | No | `lightweight` | Dispatch tier: `lightweight` (sequential), `standard` (2 concurrent), `performance` (4 concurrent) |
 
 **Auto-detection mapping:**
 - `.py` → `python-code`
@@ -79,13 +80,17 @@ Run the deterministic pre-screen before any critic dispatch:
 python3 quorum-prescreen.py "{TARGET}" --output json
 ```
 
-The pre-screen runs 10 regex-based checks (PS-001 through PS-010):
+The pre-screen runs regex-based checks including:
 - PS-001: Hardcoded paths
 - PS-002: Credential patterns
 - PS-003: PII patterns
+- PS-004: JSON validity
+- PS-005: YAML validity
 - PS-006: Python syntax
 - PS-007: Broken markdown links
 - PS-008: TODO markers
+- PS-009: Whitespace issues
+- PS-010: Empty file detection
 
 Capture the JSON output. This becomes `{PRESCREEN_EVIDENCE}` injected into critic prompts.
 
@@ -106,7 +111,7 @@ Launch all 4 critics. Each receives:
 - Any mandatory known-issue patterns
 
 ### At `thorough` depth
-Same as standard (4 critics), plus:
+Same as standard, plus:
 - All known-issue patterns (not just mandatory) injected into critic prompts
 - Model tier upgraded to Tier 1 (Opus-class) for all critics
 
@@ -117,7 +122,7 @@ For each critic, construct the prompt by filling the critic YAML's `prompt_templ
 1. `{ARTIFACT_TEXT}` ← full artifact content
 2. `{RUBRIC_NAME}`, `{RUBRIC_VERSION}`, `{RUBRIC_DOMAIN}` ← from rubric JSON
 3. `{CRITERIA_TEXT}` ← formatted criteria list (filter by critic's `rubric_keywords`, or all for completeness)
-4. `{PRESCREEN_EVIDENCE}` ← pre-screen JSON output (security critic only; empty for others)
+4. `{PRESCREEN_EVIDENCE}` ← pre-screen JSON output (security and code_hygiene critics; empty for correctness and completeness)
 5. `{EXTRA_CONTEXT}` ← mandatory known-issue patterns + any additional context
 
 **Dispatch via `task` tool:**
@@ -130,8 +135,8 @@ Each critic is dispatched as a task agent. The system prompt comes from the crit
 
 **Progress indicators:** After dispatching each critic, inform the user:
 - "🔍 Correctness critic dispatched (1 of 4)..."
-- "🔍 Security critic dispatched (2 of 4)..."
-- "🔍 Completeness critic dispatched (3 of 4)..."
+- "🔍 Completeness critic dispatched (2 of 4)..."
+- "🔍 Security critic dispatched (3 of 4)..."
 - "🔍 Code Hygiene critic dispatched (4 of 4)..."
 - "⏳ Waiting for critic results..."
 
@@ -148,6 +153,7 @@ After all critics return, aggregate findings into a verdict.
 Parse each critic's JSON output. Validate that every finding has:
 - `severity` (CRITICAL/HIGH/MEDIUM/LOW/INFO)
 - `description` (non-empty)
+- `evidence_tool` (non-empty — how the finding was verified)
 - `evidence_result` (non-empty — reject findings without evidence)
 
 **Reject ungrounded findings.** If a finding lacks `evidence_result`, discard it and log: "Finding rejected: no evidence provided."
@@ -169,9 +175,9 @@ Apply rules from `verdict-rules.yaml` in order:
 | 3+ HIGH findings | **REVISE** |
 | Any HIGH (fewer than 3) | **PASS_WITH_NOTES** |
 | Only MEDIUM/LOW | **PASS_WITH_NOTES** |
-| No findings with evidence | **PASS** |
+| No findings (or only INFO) | **PASS** |
 
-**Escalation:** If cross-artifact relationship checks found HIGH or CRITICAL issues, escalate verdict by one level (PASS → PASS_WITH_NOTES, PASS_WITH_NOTES → REVISE).
+**Escalation:** If cross-artifact relationship checks found HIGH or CRITICAL issues, escalate verdict by one level (PASS → PASS_WITH_NOTES, PASS_WITH_NOTES → REVISE). Note: relationship checks are not yet ported; this rule is reserved for future use.
 
 **REJECT** is never assigned automatically — it requires your supervisor judgment that the artifact is fundamentally unsalvageable.
 
@@ -247,10 +253,12 @@ After verdict, update `learning/known_issues.json`:
 | Failure | Action |
 |---------|--------|
 | Target not found | Abort: "❌ Target file not found: {path}" |
-| Rubric not found | Abort: "❌ Rubric not found: {name}. Available: {list}" |
+| Rubric not found | Abort: "❌ Rubric not found: {name}. Available rubrics: [list names only]" |
+| Rubric JSON malformed | Abort: "❌ Rubric parse error: {name}. Verify JSON syntax." |
+| Critic returns invalid JSON | Treat as critic failure (DEGRADED). Log warning, proceed with remaining critics. |
 | Pre-screen script missing | Warn, continue without pre-screen |
-| 1-2 critics fail/time out | DEGRADED: produce verdict from remaining critics |
-| 3 critics fail | PARTIAL: produce verdict from sole remaining critic |
+| Some critics fail/time out | DEGRADED: produce verdict from remaining critics. Apply standard verdict rules to available findings. Tag output with "⚠️ DEGRADED: N of M critics returned." |
+| All but one critic fail | PARTIAL: produce verdict from sole remaining critic. Tag output with "⚠️ PARTIAL." Verdict reflects only that critic's coverage. |
 | All critics fail | Abort: "❌ QUORUM_FAILED: All critics failed" |
 | Finding lacks evidence | Reject finding silently, count in summary |
 | Known issues file corrupted | Warn, continue without learning memory |
@@ -294,4 +302,4 @@ cp -r quorum-copilot-skill ~/.copilot/skills/quorum
 
 **This is not** the full Quorum reference implementation. The CLI version has additional capabilities (batch processing, fix loops, cost tracking, tester verification). This skill covers the highest-value portion: deterministic pre-screen → parallel critic dispatch → evidence-grounded findings → deterministic verdict.
 
-**Capability coverage:** ~75% of reference implementation. Full 4-critic suite (correctness, completeness, security, code hygiene). Missing: tester (L1/L2 verification), fixer (automated remediation), batch mode, cost tracking, structured output artifacts. These are planned for future releases.
+**Capability coverage:** ~75% of reference implementation. Includes all four core evaluation critics. Not yet ported: L1/L2 verification, automated remediation, batch mode, cost tracking, structured output artifacts. These are planned for future releases.
